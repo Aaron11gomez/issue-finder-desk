@@ -1,22 +1,84 @@
-import { useState } from 'react';
-import { mockTickets } from '@/data/mockTickets';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { Ticket } from '@/types/ticket';
 import { TicketCard } from '@/components/TicketCard';
 import { Input } from '@/components/ui/input';
-import { Search, Ticket as TicketIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Search, Ticket as TicketIcon, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const Index = () => {
-  const [tickets, setTickets] = useState<Ticket[]>(mockTickets);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const { user, signOut } = useAuth();
   const { toast } = useToast();
 
-  const handleClaim = (ticketId: string) => {
-    setTickets(tickets.filter(t => t.id !== ticketId));
-    toast({
-      title: 'Ticket claimed',
-      description: `You've successfully claimed ticket ${ticketId}`,
-    });
+  useEffect(() => {
+    fetchTickets();
+  }, []);
+
+  const fetchTickets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tickets')
+        .select('*')
+        .eq('status', 'open')
+        .is('assigned_to_id', null)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const mappedTickets: Ticket[] = (data || []).map((ticket) => ({
+        id: ticket.id,
+        title: ticket.title,
+        description: ticket.description,
+        priority: ticket.priority as Ticket['priority'],
+        createdBy: {
+          name: ticket.created_by_name,
+          email: ticket.created_by_email,
+        },
+        createdAt: ticket.created_at,
+        status: ticket.status as Ticket['status'],
+      }));
+
+      setTickets(mappedTickets);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch tickets',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClaim = async (ticketId: string) => {
+    try {
+      const { error } = await supabase
+        .from('tickets')
+        .update({
+          assigned_to_id: user?.id,
+          status: 'assigned',
+        })
+        .eq('id', ticketId);
+
+      if (error) throw error;
+
+      setTickets(tickets.filter(t => t.id !== ticketId));
+      toast({
+        title: 'Ticket claimed',
+        description: `You've successfully claimed this ticket`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to claim ticket',
+        variant: 'destructive',
+      });
+    }
   };
 
   const filteredTickets = tickets.filter(ticket => 
@@ -40,6 +102,10 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground">Technician Dashboard</p>
               </div>
             </div>
+            <Button variant="outline" onClick={signOut}>
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
           </div>
         </div>
       </header>
@@ -83,7 +149,11 @@ const Index = () => {
         </div>
 
         {/* Tickets Grid */}
-        {filteredTickets.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-16">
+            <p className="text-muted-foreground">Loading tickets...</p>
+          </div>
+        ) : filteredTickets.length === 0 ? (
           <div className="text-center py-16">
             <div className="inline-block p-4 bg-muted rounded-full mb-4">
               <TicketIcon className="w-12 h-12 text-muted-foreground" />
