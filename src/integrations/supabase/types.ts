@@ -14,69 +14,122 @@ export type Database = {
   }
   public: {
     Tables: {
+      comments: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_internal: boolean
+          ticket_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          ticket_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          ticket_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
-          email: string
-          full_name: string | null
+          full_name: string
           id: string
+          is_active: boolean
           updated_at: string
         }
         Insert: {
           created_at?: string
-          email: string
-          full_name?: string | null
+          full_name: string
           id: string
+          is_active?: boolean
           updated_at?: string
         }
         Update: {
           created_at?: string
-          email?: string
-          full_name?: string | null
+          full_name?: string
           id?: string
+          is_active?: boolean
           updated_at?: string
         }
         Relationships: []
       }
       tickets: {
         Row: {
-          assigned_to_id: string | null
+          assigned_to: string | null
           created_at: string
-          created_by_email: string
-          created_by_id: string
-          created_by_name: string
+          created_by: string
           description: string
           id: string
-          priority: Database["public"]["Enums"]["priority_level"]
+          priority: Database["public"]["Enums"]["ticket_priority"]
+          resolution_summary: string | null
           status: Database["public"]["Enums"]["ticket_status"]
           title: string
           updated_at: string
         }
         Insert: {
-          assigned_to_id?: string | null
+          assigned_to?: string | null
           created_at?: string
-          created_by_email: string
-          created_by_id: string
-          created_by_name: string
+          created_by: string
           description: string
           id?: string
-          priority?: Database["public"]["Enums"]["priority_level"]
+          priority?: Database["public"]["Enums"]["ticket_priority"]
+          resolution_summary?: string | null
           status?: Database["public"]["Enums"]["ticket_status"]
           title: string
           updated_at?: string
         }
         Update: {
-          assigned_to_id?: string | null
+          assigned_to?: string | null
           created_at?: string
-          created_by_email?: string
-          created_by_id?: string
-          created_by_name?: string
+          created_by?: string
           description?: string
           id?: string
-          priority?: Database["public"]["Enums"]["priority_level"]
+          priority?: Database["public"]["Enums"]["ticket_priority"]
+          resolution_summary?: string | null
           status?: Database["public"]["Enums"]["ticket_status"]
           title?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
         }
         Relationships: []
       }
@@ -85,11 +138,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_user_active: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      priority_level: "critical" | "high" | "medium" | "low"
-      ticket_status: "open" | "assigned" | "closed"
+      app_role: "admin" | "technician" | "client"
+      ticket_priority: "low" | "medium" | "high"
+      ticket_status: "open" | "in_progress" | "closed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -217,8 +281,9 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      priority_level: ["critical", "high", "medium", "low"],
-      ticket_status: ["open", "assigned", "closed"],
+      app_role: ["admin", "technician", "client"],
+      ticket_priority: ["low", "medium", "high"],
+      ticket_status: ["open", "in_progress", "closed"],
     },
   },
 } as const
