@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
-import { Plus, Edit, UserX, Search } from 'lucide-react';
+import { Plus, Edit, UserX, UserCheck, Search } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -25,7 +25,7 @@ const Users = () => {
   const [filteredUsers, setFilteredUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [roleFilter, setRoleFilter] = useState<string>('all'); // 'all' ahora significa 'admin' y 'technician'
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithRole | null>(null);
@@ -34,13 +34,12 @@ const Users = () => {
     fullName: '',
     email: '',
     password: '',
-    role: 'client' as 'admin' | 'technician' | 'client'
+    role: 'technician' as 'admin' | 'technician' | 'client' // Por defecto técnico
   });
 
   const [editForm, setEditForm] = useState({
     fullName: '',
-    email: '',
-    role: 'client' as 'admin' | 'technician' | 'client'
+    role: 'technician' as 'admin' | 'technician' | 'client'
   });
 
   useEffect(() => {
@@ -66,34 +65,21 @@ const Users = () => {
 
   const fetchUsers = async () => {
     try {
-      const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers();
-      if (authError) throw authError;
+      // ¡ARREGLO! Llamamos a la función RPC segura en lugar de auth.admin
+      const { data: usersData, error } = await supabase
+        .rpc('get_staff_users' as any) // <--- ¡AÑADE ESTO!
+        .returns<UserWithRole[]>();
 
-      const userIds = authUsers.map(u => u.id);
-      
-      const [profilesRes, rolesRes] = await Promise.all([
-        supabase.from('profiles').select('*').in('id', userIds),
-        supabase.from('user_roles').select('*').in('user_id', userIds)
-      ]);
+      if (error) throw error;
 
-      const profilesMap = new Map(profilesRes.data?.map(p => [p.id, p]) || []);
-      const rolesMap = new Map(rolesRes.data?.map(r => [r.user_id, r.role]) || []);
-
-      const enrichedUsers = authUsers.map(user => ({
-        id: user.id,
-        email: user.email || '',
-        full_name: profilesMap.get(user.id)?.full_name || 'Usuario',
-        is_active: profilesMap.get(user.id)?.is_active ?? true,
-        role: rolesMap.get(user.id) || 'client'
-      }));
-
-      setUsers(enrichedUsers);
-      setFilteredUsers(enrichedUsers);
+      // Líneas corregidas:
+setUsers((usersData as UserWithRole[]) || []);
+setFilteredUsers((usersData as UserWithRole[]) || []);
     } catch (error) {
       console.error('Error fetching users:', error);
       toast({
         title: 'Error',
-        description: 'No se pudieron cargar los usuarios',
+        description: 'No se pudieron cargar los usuarios. Revisa la consola.',
         variant: 'destructive'
       });
     } finally {
@@ -114,23 +100,29 @@ const Users = () => {
     }
 
     try {
-      const { data, error } = await supabase.auth.admin.createUser({
+      // auth.admin SÍ se puede usar para crear, pero solo desde un servidor.
+      // Para este panel, crearemos usuarios con auth.signUp y luego elevaremos su rol.
+      const { data, error } = await supabase.auth.signUp({
         email: createForm.email,
         password: createForm.password,
-        email_confirm: true,
-        user_metadata: {
-          full_name: createForm.fullName
+        options: {
+          data: {
+            full_name: createForm.fullName
+          }
         }
       });
 
       if (error) throw error;
 
-      if (data.user && createForm.role !== 'client') {
-        await supabase.from('user_roles').delete().eq('user_id', data.user.id);
-        await supabase.from('user_roles').insert({
-          user_id: data.user.id,
-          role: createForm.role
-        });
+      if (data.user) {
+        // El trigger automático le dará el rol de 'client'.
+        // Aquí lo actualizamos al rol deseado.
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .update({ role: createForm.role })
+          .eq('user_id', data.user.id);
+        
+        if (roleError) throw roleError;
       }
 
       toast({
@@ -139,7 +131,7 @@ const Users = () => {
       });
 
       setCreateDialogOpen(false);
-      setCreateForm({ fullName: '', email: '', password: '', role: 'client' });
+      setCreateForm({ fullName: '', email: '', password: '', role: 'technician' });
       fetchUsers();
     } catch (error: any) {
       console.error('Error creating user:', error);
@@ -154,31 +146,25 @@ const Users = () => {
   const updateUser = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!selectedUser || !editForm.fullName || !editForm.email) {
-      toast({
-        title: 'Error',
-        description: 'Por favor completa todos los campos',
-        variant: 'destructive'
-      });
+    if (!selectedUser || !editForm.fullName) {
       return;
     }
 
     try {
-      await Promise.all([
-        supabase.auth.admin.updateUserById(selectedUser.id, {
-          email: editForm.email
-        }),
+      // ¡ARREGLO! Ya no intentamos actualizar el email (auth.admin)
+      // Solo actualizamos el nombre (profiles) y el rol (user_roles)
+      const [profileRes, roleRes] = await Promise.all([
         supabase.from('profiles').update({
           full_name: editForm.fullName
-        }).eq('id', selectedUser.id)
+        }).eq('id', selectedUser.id),
+        
+        supabase.from('user_roles').update({
+          role: editForm.role
+        }).eq('user_id', selectedUser.id)
       ]);
 
-      if (editForm.role !== selectedUser.role) {
-        await supabase.from('user_roles').delete().eq('user_id', selectedUser.id);
-        await supabase.from('user_roles').insert({
-          user_id: selectedUser.id,
-          role: editForm.role
-        });
+      if (profileRes.error || roleRes.error) {
+        throw profileRes.error || roleRes.error;
       }
 
       toast({
@@ -199,23 +185,25 @@ const Users = () => {
     }
   };
 
-  const deactivateUser = async (userId: string) => {
+  // ¡NUEVO! Función para activar/desactivar
+  const toggleUserActive = async (userId: string, currentStatus: boolean) => {
     try {
+      const newStatus = !currentStatus;
       await supabase.from('profiles').update({
-        is_active: false
+        is_active: newStatus
       }).eq('id', userId);
 
       toast({
-        title: 'Usuario desactivado',
-        description: 'El usuario ha sido desactivado',
+        title: newStatus ? 'Usuario Activado' : 'Usuario Desactivado',
+        description: `El usuario ha sido ${newStatus ? 'activado' : 'desactivado'}.`,
       });
 
       fetchUsers();
     } catch (error) {
-      console.error('Error deactivating user:', error);
+      console.error('Error toggling user status:', error);
       toast({
         title: 'Error',
-        description: 'No se pudo desactivar el usuario',
+        description: 'No se pudo cambiar el estado del usuario',
         variant: 'destructive'
       });
     }
@@ -243,7 +231,6 @@ const Users = () => {
     setSelectedUser(user);
     setEditForm({
       fullName: user.full_name,
-      email: user.email,
       role: user.role
     });
     setEditDialogOpen(true);
@@ -262,9 +249,9 @@ const Users = () => {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Gestión de Usuarios</h1>
+            <h1 className="text-3xl font-bold">Gestión de Personal</h1>
             <p className="text-muted-foreground mt-2">
-              Administra las cuentas de usuario del sistema
+              Administra las cuentas de Administradores y Técnicos
             </p>
           </div>
 
@@ -272,12 +259,12 @@ const Users = () => {
             <DialogTrigger asChild>
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
-                Crear Nuevo Usuario
+                Crear Nuevo Personal
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Crear Nuevo Usuario</DialogTitle>
+                <DialogTitle>Crear Nuevo Personal</DialogTitle>
               </DialogHeader>
               <form onSubmit={createUser} className="space-y-4">
                 <div className="space-y-2">
@@ -324,7 +311,6 @@ const Users = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="client">Cliente</SelectItem>
                       <SelectItem value="technician">Técnico</SelectItem>
                       <SelectItem value="admin">Administrador</SelectItem>
                     </SelectContent>
@@ -354,15 +340,15 @@ const Users = () => {
                 </div>
               </div>
               <div className="w-full md:w-48">
+                {/* ¡FILTRO MEJORADO! */}
                 <Select value={roleFilter} onValueChange={setRoleFilter}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos los roles</SelectItem>
+                    <SelectItem value="all">Todos los Roles</SelectItem>
                     <SelectItem value="admin">Administradores</SelectItem>
                     <SelectItem value="technician">Técnicos</SelectItem>
-                    <SelectItem value="client">Clientes</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -389,9 +375,9 @@ const Users = () => {
                         <Badge variant={getRoleColor(user.role)}>
                           {getRoleLabel(user.role)}
                         </Badge>
-                        {!user.is_active && (
-                          <Badge variant="outline">Inactivo</Badge>
-                        )}
+                        <Badge variant={user.is_active ? 'secondary' : 'outline'}>
+                          {user.is_active ? 'Activo' : 'Inactivo'}
+                        </Badge>
                       </div>
                       <div className="flex gap-2">
                         <Button
@@ -401,29 +387,30 @@ const Users = () => {
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
-                        {user.is_active && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button size="sm" variant="outline">
-                                <UserX className="w-4 h-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  ¿Deseas desactivar la cuenta de {user.full_name}? El usuario no podrá iniciar sesión hasta que su cuenta sea reactivada.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => deactivateUser(user.id)}>
-                                  Desactivar
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
+                        
+                        {/* ¡BOTÓN MEJORADO! */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="sm" variant="outline" title={user.is_active ? 'Desactivar' : 'Activar'}>
+                              {user.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                ¿Deseas {user.is_active ? 'desactivar' : 'activar'} la cuenta de {user.full_name}?
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => toggleUserActive(user.id, user.is_active)}>
+                                {user.is_active ? 'Desactivar' : 'Activar'}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        
                       </div>
                     </div>
                   </div>
@@ -433,10 +420,11 @@ const Users = () => {
           </CardContent>
         </Card>
 
+        {/* DIÁLOGO DE EDICIÓN (ACTUALIZADO) */}
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Editar Usuario</DialogTitle>
+              <DialogTitle>Editar Personal</DialogTitle>
             </DialogHeader>
             <form onSubmit={updateUser} className="space-y-4">
               <div className="space-y-2">
@@ -448,15 +436,7 @@ const Users = () => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="edit-email">Correo Electrónico</Label>
-                <Input
-                  id="edit-email"
-                  type="email"
-                  value={editForm.email}
-                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                />
-              </div>
+              {/* El campo de Email se elimina porque no se puede cambiar desde el cliente */}
 
               <div className="space-y-2">
                 <Label htmlFor="edit-role">Rol</Label>
@@ -470,7 +450,6 @@ const Users = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="client">Cliente</SelectItem>
                     <SelectItem value="technician">Técnico</SelectItem>
                     <SelectItem value="admin">Administrador</SelectItem>
                   </SelectContent>
