@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -6,9 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Ticket } from 'lucide-react';
 import { z } from 'zod';
-import { useEffect } from 'react';
 
 const loginSchema = z.object({
   email: z.string().email('Correo electrónico inválido'),
@@ -100,120 +98,153 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 flex flex-col items-center">
-          <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center mb-2">
-            <Ticket className="w-6 h-6 text-primary-foreground" />
+    <div className="min-h-screen w-full lg:grid lg:grid-cols-2">
+      
+      {/* --- COLUMNA IZQUIERDA (MODIFICADA) --- */}
+      <div className="hidden lg:flex lg:flex-col items-center justify-center p-10 text-center relative bg-[url('/soporte-ti.webp')] bg-cover bg-center">
+        {/* Overlay oscuro para legibilidad */}
+        <div className="absolute inset-0 bg-black/60 z-0"></div>
+
+        {/* Contenido sobre el overlay */}
+        <div className="relative z-10 flex flex-col h-full w-full max-w-md mx-auto">
+          {/* Logo y Título de la App */}
+          <div className="absolute top-8 left-0 flex items-center gap-3">
+            <img src="/nexus-logo.png" alt="Nexus Desk Logo" className="w-8 h-8" />
+            <span className="text-xl font-bold text-primary-foreground">Nexus Desk</span>
           </div>
-          <CardTitle className="text-2xl font-bold text-center">Nexus Desk</CardTitle>
-          <CardDescription className="text-center">
-            Sistema de Gestión de Tickets de Soporte
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Iniciar Sesión</TabsTrigger>
-              <TabsTrigger value="register">Registrarse</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="login">
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email">Correo Electrónico</Label>
-                  <Input
-                    id="login-email"
-                    type="email"
-                    placeholder="tu@email.com"
-                    value={loginData.email}
-                    onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
-                  />
-                  {loginErrors.email && (
-                    <p className="text-sm text-destructive">{loginErrors.email}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="login-password">Contraseña</Label>
-                  <Input
-                    id="login-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={loginData.password}
-                    onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                  />
-                  {loginErrors.password && (
-                    <p className="text-sm text-destructive">{loginErrors.password}</p>
-                  )}
-                </div>
 
-                {loginErrors.general && (
-                  <p className="text-sm text-destructive">{loginErrors.general}</p>
-                )}
-                
-                <Button type="submit" className="w-full" disabled={loginLoading}>
-                  {loginLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-                </Button>
-              </form>
-            </TabsContent>
-            
-            <TabsContent value="register">
-              <form onSubmit={handleRegister} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="register-name">Nombre Completo</Label>
-                  <Input
-                    id="register-name"
-                    type="text"
-                    placeholder="Juan Pérez"
-                    value={registerData.fullName}
-                    onChange={(e) => setRegisterData({ ...registerData, fullName: e.target.value })}
-                  />
-                  {registerErrors.fullName && (
-                    <p className="text-sm text-destructive">{registerErrors.fullName}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="register-email">Correo Electrónico</Label>
-                  <Input
-                    id="register-email"
-                    type="email"
-                    placeholder="tu@email.com"
-                    value={registerData.email}
-                    onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
-                  />
-                  {registerErrors.email && (
-                    <p className="text-sm text-destructive">{registerErrors.email}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="register-password">Contraseña</Label>
-                  <Input
-                    id="register-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={registerData.password}
-                    onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
-                  />
-                  {registerErrors.password && (
-                    <p className="text-sm text-destructive">{registerErrors.password}</p>
-                  )}
-                </div>
+          {/* Textos centrales */}
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <h1 className="text-3xl font-bold text-white">
+              Bienvenido a tu Centro de Soporte
+            </h1>
+            <p className="text-white/80 mt-4">
+              Gestiona tus tickets, resuelve problemas y mantén a tu equipo en movimiento.
+            </p>
+          </div>
 
-                {registerErrors.general && (
-                  <p className="text-sm text-destructive">{registerErrors.general}</p>
-                )}
-                
-                <Button type="submit" className="w-full" disabled={registerLoading}>
-                  {registerLoading ? 'Creando cuenta...' : 'Crear Cuenta'}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+          {/* Footer */}
+          <p className="text-xs text-white/60">
+            © 2025 Nexus Desk. Todos los derechos reservados.
+          </p>
+        </div>
+      </div>
+      {/* --- FIN DE LA COLUMNA IZQUIERDA --- */}
+
+
+      {/* Columna Derecha (Formulario) */}
+      <div className="flex items-center justify-center p-6 sm:p-12 bg-background">
+        <Card className="w-full max-w-md border-0 shadow-none sm:border sm:shadow-sm">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-2xl font-bold text-center">Acceso a la Plataforma</CardTitle>
+            <CardDescription className="text-center">
+              Selecciona si quieres iniciar sesión o registrarte.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="login" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="login">Iniciar Sesión</TabsTrigger>
+                <TabsTrigger value="register">Registrarse</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="login" className="pt-4">
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="login-email">Correo Electrónico</Label>
+                    <Input
+                      id="login-email"
+                      type="email"
+                      placeholder="tu@email.com"
+                      value={loginData.email}
+                      onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+                    />
+                    {loginErrors.email && (
+                      <p className="text-sm text-destructive">{loginErrors.email}</p>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="login-password">Contraseña</Label>
+                    <Input
+                      id="login-password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={loginData.password}
+                      onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                    />
+                    {loginErrors.password && (
+                      <p className="text-sm text-destructive">{loginErrors.password}</p>
+                    )}
+                  </div>
+
+                  {loginErrors.general && (
+                    <p className="text-sm text-destructive">{loginErrors.general}</p>
+                  )}
+                  
+                  <Button type="submit" className="w-full" disabled={loginLoading}>
+                    {loginLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+                  </Button>
+                </form>
+              </TabsContent>
+              
+              <TabsContent value="register" className="pt-4">
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="register-name">Nombre Completo</Label>
+                    <Input
+                      id="register-name"
+                      type="text"
+                      placeholder="Juan Pérez"
+                      value={registerData.fullName}
+                      onChange={(e) => setRegisterData({ ...registerData, fullName: e.target.value })}
+                    />
+                    {registerErrors.fullName && (
+                      <p className="text-sm text-destructive">{registerErrors.fullName}</p>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="register-email">Correo Electrónico</Label>
+                    <Input
+                      id="register-email"
+                      type="email"
+                      placeholder="tu@email.com"
+                      value={registerData.email}
+                      onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
+                    />
+                    {registerErrors.email && (
+                      <p className="text-sm text-destructive">{registerErrors.email}</p>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="register-password">Contraseña</Label>
+                    <Input
+                      id="register-password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={registerData.password}
+                      onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
+                    />
+                    {registerErrors.password && (
+                      <p className="text-sm text-destructive">{registerErrors.password}</p>
+                    )}
+                  </div>
+
+                  {registerErrors.general && (
+                    <p className="text-sm text-destructive">{registerErrors.general}</p>
+                  )}
+                  
+                  <Button type="submit" className="w-full" disabled={registerLoading}>
+                    {registerLoading ? 'Creando cuenta...' : 'Crear Cuenta'}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
