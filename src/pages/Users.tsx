@@ -100,31 +100,33 @@ setFilteredUsers((usersData as UserWithRole[]) || []);
     }
 
     try {
-      // auth.admin SÍ se puede usar para crear, pero solo desde un servidor.
-      // Para este panel, crearemos usuarios con auth.signUp y luego elevaremos su rol.
-      const { data, error } = await supabase.auth.signUp({
-        email: createForm.email,
-        password: createForm.password,
-        options: {
-          data: {
-            full_name: createForm.fullName
-          }
-        }
+      // ¡ARREGLO! Llamamos a la nueva función RPC segura
+      const { data, error } = await supabase.rpc('create_staff_user' as any, {
+        new_email: createForm.email,
+        new_password: createForm.password,
+        new_full_name: createForm.fullName,
+        new_role: createForm.role
       });
 
-      if (error) throw error;
+      // --- LÓGICA DE ERROR CORREGIDA ---
 
-      if (data.user) {
-        // El trigger automático le dará el rol de 'client'.
-        // Aquí lo actualizamos al rol deseado.
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .update({ role: createForm.role })
-          .eq('user_id', data.user.id);
-        
-        if (roleError) throw roleError;
+      // 1. Manejar error de la llamada RPC (ej: error de red, permiso denegado)
+      if (error) {
+        throw new Error(error.message);
       }
 
+      // 2. Manejar error devuelto por la *función* SQL (ej: usuario duplicado)
+      //    Lo casteamos de forma segura para chequear la propiedad 'error'.
+      const rpcData = data as { error?: string };
+      if (rpcData && rpcData.error) {
+        if (rpcData.error.includes("duplicate key")) {
+          throw new Error("Un usuario con ese correo electrónico ya existe.");
+        }
+        // Lanzar el error SQL
+        throw new Error(rpcData.error);
+      }
+
+      // 3. Si no hay errores, fue un éxito
       toast({
         title: 'Usuario creado',
         description: 'El usuario ha sido creado exitosamente',
@@ -132,8 +134,12 @@ setFilteredUsers((usersData as UserWithRole[]) || []);
 
       setCreateDialogOpen(false);
       setCreateForm({ fullName: '', email: '', password: '', role: 'technician' });
-      fetchUsers();
+      
+      // Refrescar la lista de usuarios
+      fetchUsers(); 
+      
     } catch (error: any) {
+      // El bloque catch ahora recibirá los errores que lanzamos (throw)
       console.error('Error creating user:', error);
       toast({
         title: 'Error',
