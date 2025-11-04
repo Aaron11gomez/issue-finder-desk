@@ -36,6 +36,7 @@ interface Comment {
   created_at: string;
   user_id: string;
   profiles: { full_name: string } | null;
+  role?: string;
 }
 
 const TicketDetail = () => {
@@ -108,15 +109,19 @@ const TicketDetail = () => {
 
       if (commentsData && commentsData.length > 0) {
         const userIds = [...new Set(commentsData.map(c => c.user_id))];
-        const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', userIds);
+        
+        const [profilesRes, rolesRes] = await Promise.all([
+          supabase.from('profiles').select('id, full_name').in('id', userIds),
+          supabase.from('user_roles').select('user_id, role').in('user_id', userIds)
+        ]);
 
-        const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+        const profilesMap = new Map(profilesRes.data?.map(p => [p.id, p]) || []);
+        const rolesMap = new Map(rolesRes.data?.map(r => [r.user_id, r.role]) || []);
+        
         const enrichedComments = commentsData.map(comment => ({
           ...comment,
-          profiles: profilesMap.get(comment.user_id) || null
+          profiles: profilesMap.get(comment.user_id) || null,
+          role: rolesMap.get(comment.user_id) || 'client'
         }));
         
         setComments(enrichedComments as any);
@@ -350,9 +355,12 @@ const TicketDetail = () => {
                 .filter(c => !c.is_internal)
                 .map((comment) => (
                   <div key={comment.id} className="border-l-2 border-primary pl-4 py-2">
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2 mb-1">
                       <span className="font-medium">{comment.profiles?.full_name || 'Usuario'}</span>
-                      <span className="text-xs text-muted-foreground">
+                      <Badge variant="secondary" className="text-xs">
+                        {comment.role === 'admin' ? 'Administrador' : comment.role === 'technician' ? 'Técnico' : 'Cliente'}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground ml-auto">
                         {format(new Date(comment.created_at), "d MMM yyyy, HH:mm", { locale: es })}
                       </span>
                     </div>
@@ -399,9 +407,12 @@ const TicketDetail = () => {
                   .filter(c => c.is_internal)
                   .map((comment) => (
                     <div key={comment.id} className="border-l-2 border-secondary pl-4 py-2 bg-muted/30">
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium">{comment.profiles?.full_name || 'Usuario'}</span>
-                        <span className="text-xs text-muted-foreground">
+                        <Badge variant="outline" className="text-xs">
+                          {comment.role === 'admin' ? 'Administrador' : comment.role === 'technician' ? 'Técnico' : 'Cliente'}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground ml-auto">
                           {format(new Date(comment.created_at), "d MMM yyyy, HH:mm", { locale: es })}
                         </span>
                       </div>

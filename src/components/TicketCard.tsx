@@ -11,7 +11,7 @@ interface TicketCardProps {
   onClaim: (ticketId: string) => void;
 }
 
-export const TicketCard = ({ ticket, onClaim }: TicketCardProps) => {
+export const TicketCard = ({ ticket, onClaim, onClick }: TicketCardProps) => {
   const getInitials = (name: string) => {
     return name
       .split(' ')

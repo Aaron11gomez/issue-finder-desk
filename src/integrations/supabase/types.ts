@@ -19,24 +19,24 @@ export type Database = {
           content: string
           created_at: string
           id: string
-          is_internal: boolean
           ticket_id: string
+          updated_at: string
           user_id: string
         }
         Insert: {
           content: string
           created_at?: string
           id?: string
-          is_internal?: boolean
           ticket_id: string
+          updated_at?: string
           user_id: string
         }
         Update: {
           content?: string
           created_at?: string
           id?: string
-          is_internal?: boolean
           ticket_id?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -52,60 +52,63 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
-          full_name: string
+          email: string
+          full_name: string | null
           id: string
-          is_active: boolean
           updated_at: string
         }
         Insert: {
           created_at?: string
-          full_name: string
+          email: string
+          full_name?: string | null
           id: string
-          is_active?: boolean
           updated_at?: string
         }
         Update: {
           created_at?: string
-          full_name?: string
+          email?: string
+          full_name?: string | null
           id?: string
-          is_active?: boolean
           updated_at?: string
         }
         Relationships: []
       }
       tickets: {
         Row: {
-          assigned_to: string | null
+          assigned_to_id: string | null
           created_at: string
-          created_by: string
+          created_by_email: string
+          created_by_id: string
+          created_by_name: string
           description: string
           id: string
-          priority: Database["public"]["Enums"]["ticket_priority"]
-          resolution_summary: string | null
+          priority: Database["public"]["Enums"]["priority_level"]
           status: Database["public"]["Enums"]["ticket_status"]
           title: string
           updated_at: string
         }
         Insert: {
-          assigned_to?: string | null
+          assigned_to_id?: string | null
           created_at?: string
-          created_by: string
+          created_by_email: string
+          created_by_id: string
+          created_by_name: string
           description: string
           id?: string
-          priority?: Database["public"]["Enums"]["ticket_priority"]
-          resolution_summary?: string | null
+          priority?: Database["public"]["Enums"]["priority_level"]
           status?: Database["public"]["Enums"]["ticket_status"]
           title: string
           updated_at?: string
         }
         Update: {
-          assigned_to?: string | null
+          assigned_to_id?: string | null
           created_at?: string
-          created_by?: string
+          created_by_email?: string
+          created_by_id?: string
+          created_by_name?: string
           description?: string
           id?: string
-          priority?: Database["public"]["Enums"]["ticket_priority"]
-          resolution_summary?: string | null
+          priority?: Database["public"]["Enums"]["priority_level"]
           status?: Database["public"]["Enums"]["ticket_status"]
           title?: string
           updated_at?: string
@@ -122,7 +125,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
-          role: Database["public"]["Enums"]["app_role"]
+          role?: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
@@ -145,15 +148,11 @@ export type Database = {
         }
         Returns: boolean
       }
-      is_user_active: {
-        Args: { _user_id: string }
-        Returns: boolean
-      }
     }
     Enums: {
       app_role: "admin" | "technician" | "client"
-      ticket_priority: "low" | "medium" | "high"
-      ticket_status: "open" | "in_progress" | "closed"
+      priority_level: "critical" | "high" | "medium" | "low"
+      ticket_status: "open" | "assigned" | "closed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -282,8 +281,8 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "technician", "client"],
-      ticket_priority: ["low", "medium", "high"],
-      ticket_status: ["open", "in_progress", "closed"],
+      priority_level: ["critical", "high", "medium", "low"],
+      ticket_status: ["open", "assigned", "closed"],
     },
   },
 } as const
