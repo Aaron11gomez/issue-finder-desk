@@ -3,17 +3,18 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import Layout from '@/components/Layout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ArrowLeft, Send } from 'lucide-react';
+import { ArrowLeft, Send, User, CalendarDays, Ticket as TicketIcon, ShieldCheck, Clock } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'; // <-- NUEVO IMPORT
 
 interface Ticket {
   id: string;
@@ -37,6 +38,17 @@ interface Comment {
   user_id: string;
   profiles: { full_name: string } | null;
 }
+
+// --- NUEVA FUNCIÓN HELPER ---
+const getInitials = (name: string | undefined) => {
+  if (!name) return '?';
+  return name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase();
+};
+// --- FIN DE NUEVA FUNCIÓN ---
 
 const TicketDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -100,29 +112,12 @@ const TicketDetail = () => {
     try {
       const { data: commentsData, error } = await supabase
         .from('comments')
-        .select('*')
+        .select('*, profiles(full_name)') // <-- Se optimizó la query para traer el perfil
         .eq('ticket_id', id)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-
-      if (commentsData && commentsData.length > 0) {
-        const userIds = [...new Set(commentsData.map(c => c.user_id))];
-        const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', userIds);
-
-        const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
-        const enrichedComments = commentsData.map(comment => ({
-          ...comment,
-          profiles: profilesMap.get(comment.user_id) || null
-        }));
-        
-        setComments(enrichedComments as any);
-      } else {
-        setComments([]);
-      }
+      setComments((commentsData as any) || []);
     } catch (error) {
       console.error('Error fetching comments:', error);
     }
@@ -172,7 +167,7 @@ const TicketDetail = () => {
         setNewComment('');
       }
       
-      fetchComments();
+      fetchComments(); // Volver a cargar comentarios
     } catch (error) {
       console.error('Error adding comment:', error);
       toast({
@@ -210,7 +205,7 @@ const TicketDetail = () => {
       });
 
       setCloseDialogOpen(false);
-      fetchTicketDetails();
+      fetchTicketDetails(); // Volver a cargar los detalles del ticket
     } catch (error) {
       console.error('Error closing ticket:', error);
       toast({
@@ -221,6 +216,7 @@ const TicketDetail = () => {
     }
   };
 
+  // --- FUNCIONES HELPER (SIN CAMBIOS) ---
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'open': return 'Abierto';
@@ -239,6 +235,26 @@ const TicketDetail = () => {
     }
   };
 
+  const getStatusColor = (status: string): "default" | "secondary" | "outline" => {
+    switch (status) {
+      case 'open': return 'default';
+      case 'in_progress': return 'secondary';
+      case 'closed': return 'outline';
+      default: return 'default';
+    }
+  };
+
+  const getPriorityColor = (priority: string): "destructive" | "default" | "secondary" => {
+    switch (priority) {
+      case 'high': return 'destructive';
+      case 'medium': return 'default';
+      case 'low': return 'secondary';
+      default: return 'default';
+    }
+  };
+  // --- FIN DE FUNCIONES HELPER ---
+
+
   if (loading || !ticket) {
     return (
       <Layout>
@@ -250,6 +266,7 @@ const TicketDetail = () => {
   const canAddInternalNotes = role === 'admin' || role === 'technician';
   const canCloseTicket = (role === 'admin' || role === 'technician') && ticket.status === 'in_progress';
 
+  // --- RENDERIZADO COMPLETAMENTE MODIFICADO ---
   return (
     <Layout>
       <div className="space-y-6">
@@ -287,149 +304,198 @@ const TicketDetail = () => {
           )}
         </div>
 
-        <Card>
-          <CardHeader>
-            <div className="space-y-4">
-              <div className="flex items-start justify-between">
+        {/* --- NUEVO LAYOUT DE 2 COLUMNAS --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 lg:gap-6 items-start">
+          
+          {/* --- COLUMNA PRINCIPAL (IZQUIERDA) --- */}
+          <div className="lg:col-span-2 flex flex-col gap-6">
+            
+            {/* --- Tarjeta de Título y Descripción --- */}
+            <Card>
+              <CardHeader>
                 <CardTitle className="text-2xl">{ticket.title}</CardTitle>
-                <div className="flex gap-2">
-                  <Badge>{getStatusLabel(ticket.status)}</Badge>
-                  <Badge variant="outline">{getPriorityLabel(ticket.priority)}</Badge>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Creado por: </span>
-                  <span className="font-medium">{ticket.creator?.full_name || 'Desconocido'}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Asignado a: </span>
-                  <span className="font-medium">{ticket.assignee?.full_name || 'Sin asignar'}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Fecha de creación: </span>
-                  <span className="font-medium">
-                    {format(new Date(ticket.created_at), "d 'de' MMMM, yyyy", { locale: es })}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-semibold mb-2">Descripción</h3>
-                <p className="text-muted-foreground">{ticket.description}</p>
-              </div>
-              
-              {ticket.resolution_summary && (
-                <>
-                  <Separator />
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
                   <div>
-                    <h3 className="font-semibold mb-2">Resolución</h3>
-                    <p className="text-muted-foreground">{ticket.resolution_summary}</p>
+                    <h3 className="font-semibold mb-2 text-foreground">Descripción</h3>
+                    <p className="text-muted-foreground whitespace-pre-wrap">{ticket.description}</p>
                   </div>
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                  
+                  {ticket.resolution_summary && (
+                    <>
+                      <Separator />
+                      <div>
+                        <h3 className="font-semibold mb-2 text-foreground">Resolución</h3>
+                        <p className="text-muted-foreground whitespace-pre-wrap">{ticket.resolution_summary}</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Comentarios</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {comments.filter(c => !c.is_internal).length === 0 ? (
-              <p className="text-muted-foreground text-center py-4">
-                No hay comentarios aún
-              </p>
-            ) : (
-              comments
-                .filter(c => !c.is_internal)
-                .map((comment) => (
-                  <div key={comment.id} className="border-l-2 border-primary pl-4 py-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium">{comment.profiles?.full_name || 'Usuario'}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {format(new Date(comment.created_at), "d MMM yyyy, HH:mm", { locale: es })}
-                      </span>
-                    </div>
-                    <p className="text-muted-foreground">{comment.content}</p>
-                  </div>
-                ))
-            )}
-
-            {ticket.status !== 'closed' && (
-              <>
-                <Separator />
-                <div className="space-y-2">
+            {/* --- Tarjeta de Comentarios Públicos --- */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Comentarios</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {comments.filter(c => !c.is_internal).length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">
+                    No hay comentarios aún
+                  </p>
+                ) : (
+                  comments
+                    .filter(c => !c.is_internal)
+                    .map((comment) => (
+                      <div key={comment.id} className="flex items-start gap-3">
+                        <Avatar className="h-9 w-9 border">
+                          <AvatarFallback>{getInitials(comment.profiles?.full_name)}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium text-sm">{comment.profiles?.full_name || 'Usuario'}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(comment.created_at), { locale: es, addSuffix: true })}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{comment.content}</p>
+                        </div>
+                      </div>
+                    ))
+                )}
+              </CardContent>
+              {ticket.status !== 'closed' && (
+                <CardFooter className="flex-col items-start gap-2 pt-4 border-t">
+                  <Label htmlFor="new-comment">Añadir comentario</Label>
                   <Textarea
+                    id="new-comment"
                     placeholder="Escribe un comentario..."
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     rows={3}
                   />
-                  <Button onClick={() => addComment(false)}>
+                  <Button onClick={() => addComment(false)} size="sm">
                     <Send className="w-4 h-4 mr-2" />
                     Enviar Comentario
                   </Button>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {canAddInternalNotes && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Notas Internas</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Solo visibles para técnicos y administradores
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {comments.filter(c => c.is_internal).length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">
-                  No hay notas internas aún
-                </p>
-              ) : (
-                comments
-                  .filter(c => c.is_internal)
-                  .map((comment) => (
-                    <div key={comment.id} className="border-l-2 border-secondary pl-4 py-2 bg-muted/30">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium">{comment.profiles?.full_name || 'Usuario'}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {format(new Date(comment.created_at), "d MMM yyyy, HH:mm", { locale: es })}
-                        </span>
-                      </div>
-                      <p className="text-muted-foreground">{comment.content}</p>
-                    </div>
-                  ))
+                </CardFooter>
               )}
+            </Card>
 
-              {ticket.status !== 'closed' && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
+            {/* --- Tarjeta de Notas Internas (Solo para staff) --- */}
+            {canAddInternalNotes && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Notas Internas</CardTitle>
+                  <CardDescription>
+                    Solo visibles para técnicos y administradores
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {comments.filter(c => c.is_internal).length === 0 ? (
+                    <p className="text-muted-foreground text-center py-4">
+                      No hay notas internas aún
+                    </p>
+                  ) : (
+                    comments
+                      .filter(c => c.is_internal)
+                      .map((comment) => (
+                        <div key={comment.id} className="flex items-start gap-3">
+                          <Avatar className="h-9 w-9 border">
+                            <AvatarFallback className="bg-secondary text-secondary-foreground">{getInitials(comment.profiles?.full_name)}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-medium text-sm">{comment.profiles?.full_name || 'Usuario'}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {formatDistanceToNow(new Date(comment.created_at), { locale: es, addSuffix: true })}
+                              </span>
+                            </div>
+                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{comment.content}</p>
+                          </div>
+                        </div>
+                      ))
+                  )}
+                </CardContent>
+                {ticket.status !== 'closed' && (
+                  <CardFooter className="flex-col items-start gap-2 pt-4 border-t">
+                    <Label htmlFor="new-internal-note">Añadir nota interna</Label>
                     <Textarea
+                      id="new-internal-note"
                       placeholder="Escribe una nota interna..."
                       value={newInternalNote}
                       onChange={(e) => setNewInternalNote(e.target.value)}
                       rows={3}
                     />
-                    <Button onClick={() => addComment(true)} variant="secondary">
+                    <Button onClick={() => addComment(true)} variant="secondary" size="sm">
                       <Send className="w-4 h-4 mr-2" />
                       Añadir Nota Interna
                     </Button>
+                  </CardFooter>
+                )}
+              </Card>
+            )}
+
+          </div>
+
+          {/* --- COLUMNA LATERAL (DERECHA) --- */}
+          <div className="lg:col-span-1 lg:sticky lg:top-8 space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Detalles del Ticket</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="status-badge" className="text-muted-foreground">Estado</Label>
+                  <Badge id="status-badge" variant={getStatusColor(ticket.status)}>
+                    {getStatusLabel(ticket.status)}
+                  </Badge>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="priority-badge" className="text-muted-foreground">Prioridad</Label>
+                  <Badge id="priority-badge" variant={getPriorityColor(ticket.priority)}>
+                    {getPriorityLabel(ticket.priority)}
+                  </Badge>
+                </div>
+
+                <Separator />
+                
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground mr-1">Creado por:</span>
+                    <span className="font-medium">{ticket.creator?.full_name || 'Desconocido'}</span>
                   </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        )}
+                  
+                  <div className="flex items-center gap-2 text-sm">
+                    <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground mr-1">Asignado a:</span>
+                    <span className="font-medium">{ticket.assignee?.full_name || 'Sin asignar'}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-sm">
+                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground mr-1">Creado:</span>
+                    <span className="font-medium">
+                      {format(new Date(ticket.created_at), "d MMM, yyyy", { locale: es })}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-sm">
+                    <TicketIcon className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground mr-1">Ticket ID:</span>
+                    <span className="font-mono text-xs font-medium">{ticket.id}</span>
+                  </div>
+                </div>
+
+              </CardContent>
+            </Card>
+          </div>
+
+        </div>
       </div>
     </Layout>
   );

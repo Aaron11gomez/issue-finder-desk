@@ -100,7 +100,7 @@ const Auth = () => {
   return (
     <div className="min-h-screen w-full lg:grid lg:grid-cols-2">
       
-      {/* --- COLUMNA IZQUIERDA (MODIFICADA) --- */}
+      {/* --- COLUMNA IZQUIERDA (CON IMAGEN DE FONDO) --- */}
       <div className="hidden lg:flex lg:flex-col items-center justify-center p-10 text-center relative bg-[url('/soporte-ti.webp')] bg-cover bg-center">
         {/* Overlay oscuro para legibilidad */}
         <div className="absolute inset-0 bg-black/60 z-0"></div>

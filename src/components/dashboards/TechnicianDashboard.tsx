@@ -9,6 +9,17 @@ import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
+// --- NUEVOS IMPORTS PARA LA TABLA ---
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+// --- FIN DE NUEVOS IMPORTS ---
+
 interface Ticket {
   id: string;
   title: string;
@@ -101,7 +112,7 @@ const TechnicianDashboard = () => {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
+  const getPriorityColor = (priority: string): "destructive" | "default" | "secondary" => {
     switch (priority) {
       case 'high': return 'destructive';
       case 'medium': return 'default';
@@ -132,51 +143,57 @@ const TechnicianDashboard = () => {
         </p>
       </div>
 
-      {tickets.length === 0 ? (
-        <Card>
-          <CardContent className="pt-6">
+      {/* --- RENDERIZADO MODIFICADO --- */}
+      <Card>
+        <CardContent className="pt-6">
+          {tickets.length === 0 ? (
             <p className="text-center text-muted-foreground">
               No hay tickets sin asignar en este momento
             </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4">
-          {tickets.map((ticket) => (
-            <Card key={ticket.id}>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-xl">{ticket.title}</CardTitle>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <span>Por: {ticket.creator_profile?.full_name || 'Usuario'}</span>
-                      <span>•</span>
-                      <span>{format(new Date(ticket.created_at), "d 'de' MMMM, yyyy", { locale: es })}</span>
-                    </div>
-                  </div>
-                  <Badge variant={getPriorityColor(ticket.priority)}>
-                    {getPriorityLabel(ticket.priority)}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground mb-4">{ticket.description}</p>
-                <div className="flex gap-2">
-                  <Button onClick={() => assignTicket(ticket.id)}>
-                    Asignarme
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => navigate(`/ticket/${ticket.id}`)}
-                  >
-                    Ver Detalles
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Título</TableHead>
+                  <TableHead>Prioridad</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tickets.map((ticket) => (
+                  <TableRow key={ticket.id}>
+                    <TableCell className="font-medium">{ticket.title}</TableCell>
+                    <TableCell>
+                      <Badge variant={getPriorityColor(ticket.priority)}>
+                        {getPriorityLabel(ticket.priority)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{ticket.creator_profile?.full_name || 'Usuario'}</TableCell>
+                    <TableCell>
+                      {format(new Date(ticket.created_at), "d MMM, yyyy", { locale: es })}
+                    </TableCell>
+                    <TableCell className="text-right space-x-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => navigate(`/ticket/${ticket.id}`)}
+                      >
+                        Ver
+                      </Button>
+                      <Button size="sm" onClick={() => assignTicket(ticket.id)}>
+                        Asignarme
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+      {/* --- FIN DE RENDERIZADO MODIFICADO --- */}
     </div>
   );
 };

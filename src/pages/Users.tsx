@@ -141,7 +141,7 @@ setFilteredUsers((usersData as UserWithRole[]) || []);
     } catch (error: any) {
       // El bloque catch ahora recibirá los errores que lanzamos (throw)
       console.error('Error creating user:', error);
-      toast({
+      toast({     
         title: 'Error',
         description: error.message || 'No se pudo crear el usuario',
         variant: 'destructive'
