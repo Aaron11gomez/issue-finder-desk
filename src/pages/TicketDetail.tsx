@@ -19,20 +19,18 @@ interface Ticket {
   id: string;
   title: string;
   description: string;
-  priority: 'low' | 'medium' | 'high';
-  status: 'open' | 'in_progress' | 'closed';
-  resolution_summary: string | null;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  status: 'open' | 'assigned' | 'closed';
   created_at: string;
-  created_by: string;
-  assigned_to: string | null;
-  creator: { full_name: string } | null;
-  assignee: { full_name: string } | null;
+  created_by_id: string;
+  created_by_name: string;
+  created_by_email: string;
+  assigned_to_id: string | null;
 }
 
 interface Comment {
   id: string;
   content: string;
-  is_internal: boolean;
   created_at: string;
   user_id: string;
   profiles: { full_name: string } | null;
@@ -47,8 +45,6 @@ const TicketDetail = () => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
-  const [newInternalNote, setNewInternalNote] = useState('');
-  const [resolutionSummary, setResolutionSummary] = useState('');
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -69,21 +65,21 @@ const TicketDetail = () => {
       if (error) throw error;
 
       if (ticketData) {
-        const userIds = [ticketData.created_by, ticketData.assigned_to].filter(Boolean);
-        const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', userIds);
+        const canView = 
+          ticketData.created_by_id === user?.id || 
+          ticketData.assigned_to_id === user?.id;
 
-        const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
-        
-        const enrichedTicket = {
-          ...ticketData,
-          creator: profilesMap.get(ticketData.created_by) || null,
-          assignee: ticketData.assigned_to ? profilesMap.get(ticketData.assigned_to) || null : null
-        };
-        
-        setTicket(enrichedTicket as any);
+        if (!canView) {
+          toast({
+            title: 'Acceso denegado',
+            description: 'No tienes permiso para ver este ticket',
+            variant: 'destructive'
+          });
+          navigate('/dashboard');
+          return;
+        }
+
+        setTicket(ticketData);
       }
     } catch (error) {
       console.error('Error fetching ticket:', error);
@@ -133,10 +129,8 @@ const TicketDetail = () => {
     }
   };
 
-  const addComment = async (isInternal: boolean) => {
-    const content = isInternal ? newInternalNote : newComment;
-    
-    if (!content.trim()) {
+  const addComment = async () => {
+    if (!newComment.trim()) {
       toast({
         title: 'Error',
         description: 'El comentario no puede estar vacío',
@@ -160,23 +154,17 @@ const TicketDetail = () => {
         .insert({
           ticket_id: id,
           user_id: user?.id,
-          content,
-          is_internal: isInternal
+          content: newComment
         });
 
       if (error) throw error;
 
       toast({
         title: 'Comentario agregado',
-        description: isInternal ? 'Nota interna guardada' : 'Comentario publicado',
+        description: 'Comentario publicado exitosamente',
       });
 
-      if (isInternal) {
-        setNewInternalNote('');
-      } else {
-        setNewComment('');
-      }
-      
+      setNewComment('');
       fetchComments();
     } catch (error) {
       console.error('Error adding comment:', error);
@@ -189,22 +177,10 @@ const TicketDetail = () => {
   };
 
   const closeTicket = async () => {
-    if (!resolutionSummary.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Debes proporcionar un resumen de la resolución',
-        variant: 'destructive'
-      });
-      return;
-    }
-
     try {
       const { error } = await supabase
         .from('tickets')
-        .update({
-          status: 'closed',
-          resolution_summary: resolutionSummary
-        })
+        .update({ status: 'closed' })
         .eq('id', id);
 
       if (error) throw error;
@@ -229,7 +205,7 @@ const TicketDetail = () => {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'open': return 'Abierto';
-      case 'in_progress': return 'En Progreso';
+      case 'assigned': return 'Asignado';
       case 'closed': return 'Cerrado';
       default: return status;
     }
@@ -237,6 +213,7 @@ const TicketDetail = () => {
 
   const getPriorityLabel = (priority: string) => {
     switch (priority) {
+      case 'critical': return 'Crítica';
       case 'high': return 'Alta';
       case 'medium': return 'Media';
       case 'low': return 'Baja';
@@ -252,8 +229,7 @@ const TicketDetail = () => {
     );
   }
 
-  const canAddInternalNotes = role === 'admin' || role === 'technician';
-  const canCloseTicket = (role === 'admin' || role === 'technician') && ticket.status === 'in_progress';
+  const canCloseTicket = (role === 'admin' || role === 'technician') && ticket.status === 'assigned';
 
   return (
     <Layout>
@@ -273,20 +249,12 @@ const TicketDetail = () => {
                 <DialogHeader>
                   <DialogTitle>Cerrar Ticket</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Resumen de la Resolución</Label>
-                    <Textarea
-                      value={resolutionSummary}
-                      onChange={(e) => setResolutionSummary(e.target.value)}
-                      placeholder="Describe cómo se resolvió el problema"
-                      rows={4}
-                    />
-                  </div>
-                  <Button onClick={closeTicket} className="w-full">
-                    Confirmar Cierre
-                  </Button>
-                </div>
+                <p className="text-muted-foreground">
+                  ¿Estás seguro de que deseas cerrar este ticket?
+                </p>
+                <Button onClick={closeTicket} className="w-full">
+                  Confirmar Cierre
+                </Button>
               </DialogContent>
             </Dialog>
           )}
@@ -306,11 +274,11 @@ const TicketDetail = () => {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Creado por: </span>
-                  <span className="font-medium">{ticket.creator?.full_name || 'Desconocido'}</span>
+                  <span className="font-medium">{ticket.created_by_name || 'Desconocido'}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Asignado a: </span>
-                  <span className="font-medium">{ticket.assignee?.full_name || 'Sin asignar'}</span>
+                  <span className="font-medium">{ticket.assigned_to_id ? 'Asignado' : 'Sin asignar'}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Fecha de creación: </span>
@@ -327,16 +295,6 @@ const TicketDetail = () => {
                 <h3 className="font-semibold mb-2">Descripción</h3>
                 <p className="text-muted-foreground">{ticket.description}</p>
               </div>
-              
-              {ticket.resolution_summary && (
-                <>
-                  <Separator />
-                  <div>
-                    <h3 className="font-semibold mb-2">Resolución</h3>
-                    <p className="text-muted-foreground">{ticket.resolution_summary}</p>
-                  </div>
-                </>
-              )}
             </div>
           </CardContent>
         </Card>
@@ -346,27 +304,25 @@ const TicketDetail = () => {
             <CardTitle>Comentarios</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {comments.filter(c => !c.is_internal).length === 0 ? (
+            {comments.length === 0 ? (
               <p className="text-muted-foreground text-center py-4">
                 No hay comentarios aún
               </p>
             ) : (
-              comments
-                .filter(c => !c.is_internal)
-                .map((comment) => (
-                  <div key={comment.id} className="border-l-2 border-primary pl-4 py-2">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium">{comment.profiles?.full_name || 'Usuario'}</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {comment.role === 'admin' ? 'Administrador' : comment.role === 'technician' ? 'Técnico' : 'Cliente'}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground ml-auto">
-                        {format(new Date(comment.created_at), "d MMM yyyy, HH:mm", { locale: es })}
-                      </span>
-                    </div>
-                    <p className="text-muted-foreground">{comment.content}</p>
+              comments.map((comment) => (
+                <div key={comment.id} className="border-l-2 border-primary pl-4 py-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium">{comment.profiles?.full_name || 'Usuario'}</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {comment.role === 'admin' ? 'Administrador' : comment.role === 'technician' ? 'Técnico' : 'Cliente'}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground ml-auto">
+                      {format(new Date(comment.created_at), "d MMM yyyy, HH:mm", { locale: es })}
+                    </span>
                   </div>
-                ))
+                  <p className="text-muted-foreground">{comment.content}</p>
+                </div>
+              ))
             )}
 
             {ticket.status !== 'closed' && (
@@ -379,7 +335,7 @@ const TicketDetail = () => {
                     onChange={(e) => setNewComment(e.target.value)}
                     rows={3}
                   />
-                  <Button onClick={() => addComment(false)}>
+                  <Button onClick={addComment}>
                     <Send className="w-4 h-4 mr-2" />
                     Enviar Comentario
                   </Button>
@@ -388,59 +344,6 @@ const TicketDetail = () => {
             )}
           </CardContent>
         </Card>
-
-        {canAddInternalNotes && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Notas Internas</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Solo visibles para técnicos y administradores
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {comments.filter(c => c.is_internal).length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">
-                  No hay notas internas aún
-                </p>
-              ) : (
-                comments
-                  .filter(c => c.is_internal)
-                  .map((comment) => (
-                    <div key={comment.id} className="border-l-2 border-secondary pl-4 py-2 bg-muted/30">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium">{comment.profiles?.full_name || 'Usuario'}</span>
-                        <Badge variant="outline" className="text-xs">
-                          {comment.role === 'admin' ? 'Administrador' : comment.role === 'technician' ? 'Técnico' : 'Cliente'}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground ml-auto">
-                          {format(new Date(comment.created_at), "d MMM yyyy, HH:mm", { locale: es })}
-                        </span>
-                      </div>
-                      <p className="text-muted-foreground">{comment.content}</p>
-                    </div>
-                  ))
-              )}
-
-              {ticket.status !== 'closed' && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <Textarea
-                      placeholder="Escribe una nota interna..."
-                      value={newInternalNote}
-                      onChange={(e) => setNewInternalNote(e.target.value)}
-                      rows={3}
-                    />
-                    <Button onClick={() => addComment(true)} variant="secondary">
-                      <Send className="w-4 h-4 mr-2" />
-                      Añadir Nota Interna
-                    </Button>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        )}
       </div>
     </Layout>
   );

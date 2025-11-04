@@ -9,7 +9,7 @@ type UserRole = 'admin' | 'technician' | 'client';
 interface Profile {
   id: string;
   full_name: string;
-  is_active: boolean;
+  email: string;
 }
 
 interface AuthContextType {
@@ -96,15 +96,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         const profileData = profileRes.data;
         if (profileData) {
-          if (!profileData.is_active) {
-            toast({
-              title: "Cuenta inactiva",
-              description: "Tu cuenta ha sido desactivada. Contacta al administrador.",
-              variant: "destructive"
-            });
-            await signOut();
-            return;
-          }
           setProfile(profileData);
         }
 

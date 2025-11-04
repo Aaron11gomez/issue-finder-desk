@@ -14,8 +14,8 @@ interface Ticket {
   id: string;
   title: string;
   description: string;
-  priority: 'low' | 'medium' | 'high';
-  status: 'open' | 'in_progress' | 'closed';
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  status: 'open' | 'assigned' | 'closed';
   created_at: string;
 }
 
@@ -34,8 +34,8 @@ const MyAssignedTickets = () => {
       const { data, error } = await supabase
         .from('tickets')
         .select('*')
-        .eq('assigned_to', user?.id)
-        .in('status', ['in_progress', 'closed'])
+        .eq('assigned_to_id', user?.id)
+        .in('status', ['assigned', 'closed'])
         .order('status', { ascending: true })
         .order('created_at', { ascending: false });
 
@@ -55,7 +55,7 @@ const MyAssignedTickets = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'in_progress': return 'default';
+      case 'assigned': return 'default';
       case 'closed': return 'outline';
       default: return 'default';
     }
@@ -63,7 +63,7 @@ const MyAssignedTickets = () => {
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'in_progress': return 'En Progreso';
+      case 'assigned': return 'Asignado';
       case 'closed': return 'Cerrado';
       default: return status;
     }
@@ -71,6 +71,7 @@ const MyAssignedTickets = () => {
 
   const getPriorityLabel = (priority: string) => {
     switch (priority) {
+      case 'critical': return 'Crítica';
       case 'high': return 'Alta';
       case 'medium': return 'Media';
       case 'low': return 'Baja';
@@ -80,6 +81,7 @@ const MyAssignedTickets = () => {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
+      case 'critical': return 'destructive';
       case 'high': return 'destructive';
       case 'medium': return 'default';
       case 'low': return 'secondary';

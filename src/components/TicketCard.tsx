@@ -8,7 +8,8 @@ import { formatDistanceToNow } from 'date-fns';
 
 interface TicketCardProps {
   ticket: Ticket;
-  onClaim: (ticketId: string) => void;
+  onClaim?: (ticketId: string) => void;
+  onClick?: () => void;
 }
 
 export const TicketCard = ({ ticket, onClaim, onClick }: TicketCardProps) => {
@@ -20,10 +21,10 @@ export const TicketCard = ({ ticket, onClaim, onClick }: TicketCardProps) => {
       .toUpperCase();
   };
 
-  const timeAgo = formatDistanceToNow(new Date(ticket.createdAt), { addSuffix: true });
+  const timeAgo = formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true });
 
   return (
-    <Card className="hover:shadow-md transition-all duration-200 border-border">
+    <Card className="hover:shadow-md transition-all duration-200 border-border cursor-pointer" onClick={onClick}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -45,10 +46,10 @@ export const TicketCard = ({ ticket, onClaim, onClick }: TicketCardProps) => {
           <div className="flex items-center gap-2">
             <Avatar className="h-6 w-6">
               <AvatarFallback className="text-xs bg-secondary">
-                {getInitials(ticket.createdBy.name)}
+                {getInitials(ticket.created_by_name)}
               </AvatarFallback>
             </Avatar>
-            <span className="truncate">{ticket.createdBy.name}</span>
+            <span className="truncate">{ticket.created_by_name}</span>
           </div>
           
           <div className="flex items-center gap-1">
@@ -58,16 +59,21 @@ export const TicketCard = ({ ticket, onClaim, onClick }: TicketCardProps) => {
         </div>
       </CardContent>
       
-      <CardFooter>
-        <Button 
-          onClick={() => onClaim(ticket.id)} 
-          className="w-full"
-          variant="default"
-        >
-          <User className="w-4 h-4 mr-2" />
-          Claim Ticket
-        </Button>
-      </CardFooter>
+      {onClaim && (
+        <CardFooter>
+          <Button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onClaim(ticket.id);
+            }} 
+            className="w-full"
+            variant="default"
+          >
+            <User className="w-4 h-4 mr-2" />
+            Claim Ticket
+          </Button>
+        </CardFooter>
+      )}
     </Card>
   );
 };
