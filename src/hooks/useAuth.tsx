@@ -9,7 +9,7 @@ type UserRole = 'admin' | 'technician' | 'client';
 interface Profile {
   id: string;
   full_name: string;
-  is_active: boolean;
+  email: string;
 }
 
 interface AuthContextType {

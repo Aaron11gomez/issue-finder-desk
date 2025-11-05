@@ -5,10 +5,11 @@ export interface Ticket {
   title: string;
   description: string;
   priority: Priority;
-  createdBy: {
-    name: string;
-    email: string;
-  };
-  createdAt: string;
+  created_by_id: string;
+  created_by_name: string;
+  created_by_email: string;
+  assigned_to_id: string | null;
+  created_at: string;
+  updated_at: string;
   status: 'open' | 'assigned' | 'closed';
 }

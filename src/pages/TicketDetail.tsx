@@ -20,23 +20,22 @@ interface Ticket {
   id: string;
   title: string;
   description: string;
-  priority: 'low' | 'medium' | 'high';
-  status: 'open' | 'in_progress' | 'closed';
-  resolution_summary: string | null;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  status: 'open' | 'assigned' | 'closed';
   created_at: string;
-  created_by: string;
-  assigned_to: string | null;
-  creator: { full_name: string } | null;
-  assignee: { full_name: string } | null;
+  created_by_id: string;
+  created_by_name: string;
+  created_by_email: string;
+  assigned_to_id: string | null;
 }
 
 interface Comment {
   id: string;
   content: string;
-  is_internal: boolean;
   created_at: string;
   user_id: string;
   profiles: { full_name: string } | null;
+  role?: string;
 }
 
 // --- NUEVA FUNCIÓN HELPER ---
@@ -58,8 +57,6 @@ const TicketDetail = () => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
-  const [newInternalNote, setNewInternalNote] = useState('');
-  const [resolutionSummary, setResolutionSummary] = useState('');
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -80,21 +77,21 @@ const TicketDetail = () => {
       if (error) throw error;
 
       if (ticketData) {
-        const userIds = [ticketData.created_by, ticketData.assigned_to].filter(Boolean);
-        const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', userIds);
+        const canView = 
+          ticketData.created_by_id === user?.id || 
+          ticketData.assigned_to_id === user?.id;
 
-        const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
-        
-        const enrichedTicket = {
-          ...ticketData,
-          creator: profilesMap.get(ticketData.created_by) || null,
-          assignee: ticketData.assigned_to ? profilesMap.get(ticketData.assigned_to) || null : null
-        };
-        
-        setTicket(enrichedTicket as any);
+        if (!canView) {
+          toast({
+            title: 'Acceso denegado',
+            description: 'No tienes permiso para ver este ticket',
+            variant: 'destructive'
+          });
+          navigate('/dashboard');
+          return;
+        }
+
+        setTicket(ticketData);
       }
     } catch (error) {
       console.error('Error fetching ticket:', error);
@@ -123,10 +120,8 @@ const TicketDetail = () => {
     }
   };
 
-  const addComment = async (isInternal: boolean) => {
-    const content = isInternal ? newInternalNote : newComment;
-    
-    if (!content.trim()) {
+  const addComment = async () => {
+    if (!newComment.trim()) {
       toast({
         title: 'Error',
         description: 'El comentario no puede estar vacío',
@@ -150,15 +145,14 @@ const TicketDetail = () => {
         .insert({
           ticket_id: id,
           user_id: user?.id,
-          content,
-          is_internal: isInternal
+          content: newComment
         });
 
       if (error) throw error;
 
       toast({
         title: 'Comentario agregado',
-        description: isInternal ? 'Nota interna guardada' : 'Comentario publicado',
+        description: 'Comentario publicado exitosamente',
       });
 
       if (isInternal) {
@@ -179,22 +173,10 @@ const TicketDetail = () => {
   };
 
   const closeTicket = async () => {
-    if (!resolutionSummary.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Debes proporcionar un resumen de la resolución',
-        variant: 'destructive'
-      });
-      return;
-    }
-
     try {
       const { error } = await supabase
         .from('tickets')
-        .update({
-          status: 'closed',
-          resolution_summary: resolutionSummary
-        })
+        .update({ status: 'closed' })
         .eq('id', id);
 
       if (error) throw error;
@@ -220,7 +202,7 @@ const TicketDetail = () => {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'open': return 'Abierto';
-      case 'in_progress': return 'En Progreso';
+      case 'assigned': return 'Asignado';
       case 'closed': return 'Cerrado';
       default: return status;
     }
@@ -228,6 +210,7 @@ const TicketDetail = () => {
 
   const getPriorityLabel = (priority: string) => {
     switch (priority) {
+      case 'critical': return 'Crítica';
       case 'high': return 'Alta';
       case 'medium': return 'Media';
       case 'low': return 'Baja';
@@ -263,8 +246,7 @@ const TicketDetail = () => {
     );
   }
 
-  const canAddInternalNotes = role === 'admin' || role === 'technician';
-  const canCloseTicket = (role === 'admin' || role === 'technician') && ticket.status === 'in_progress';
+  const canCloseTicket = (role === 'admin' || role === 'technician') && ticket.status === 'assigned';
 
   // --- RENDERIZADO COMPLETAMENTE MODIFICADO ---
   return (
@@ -285,20 +267,12 @@ const TicketDetail = () => {
                 <DialogHeader>
                   <DialogTitle>Cerrar Ticket</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Resumen de la Resolución</Label>
-                    <Textarea
-                      value={resolutionSummary}
-                      onChange={(e) => setResolutionSummary(e.target.value)}
-                      placeholder="Describe cómo se resolvió el problema"
-                      rows={4}
-                    />
-                  </div>
-                  <Button onClick={closeTicket} className="w-full">
-                    Confirmar Cierre
-                  </Button>
-                </div>
+                <p className="text-muted-foreground">
+                  ¿Estás seguro de que deseas cerrar este ticket?
+                </p>
+                <Button onClick={closeTicket} className="w-full">
+                  Confirmar Cierre
+                </Button>
               </DialogContent>
             </Dialog>
           )}

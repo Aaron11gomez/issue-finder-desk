@@ -24,13 +24,12 @@ interface Ticket {
   id: string;
   title: string;
   description: string;
-  priority: 'low' | 'medium' | 'high';
+  priority: 'critical' | 'high' | 'medium' | 'low';
   status: string;
   created_at: string;
-  created_by: string;
-  creator_profile: {
-    full_name: string;
-  } | null;
+  created_by_id: string;
+  created_by_name: string;
+  created_by_email: string;
 }
 
 const TechnicianDashboard = () => {
@@ -49,29 +48,12 @@ const TechnicianDashboard = () => {
         .from('tickets')
         .select('*')
         .eq('status', 'open')
-        .is('assigned_to', null)
+        .is('assigned_to_id', null)
         .order('priority', { ascending: false })
         .order('created_at', { ascending: true });
 
       if (ticketsError) throw ticketsError;
-
-      if (ticketsData && ticketsData.length > 0) {
-        const userIds = [...new Set(ticketsData.map(t => t.created_by))];
-        const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', userIds);
-
-        const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
-        const enrichedTickets = ticketsData.map(ticket => ({
-          ...ticket,
-          creator_profile: profilesMap.get(ticket.created_by) || null
-        }));
-        
-        setTickets(enrichedTickets as any);
-      } else {
-        setTickets([]);
-      }
+      setTickets(ticketsData || []);
     } catch (error) {
       console.error('Error fetching tickets:', error);
       toast({
@@ -89,8 +71,8 @@ const TechnicianDashboard = () => {
       const { error } = await supabase
         .from('tickets')
         .update({ 
-          assigned_to: user?.id,
-          status: 'in_progress'
+          assigned_to_id: user?.id,
+          status: 'assigned'
         })
         .eq('id', ticketId);
 
@@ -114,6 +96,7 @@ const TechnicianDashboard = () => {
 
   const getPriorityColor = (priority: string): "destructive" | "default" | "secondary" => {
     switch (priority) {
+      case 'critical': return 'destructive';
       case 'high': return 'destructive';
       case 'medium': return 'default';
       case 'low': return 'secondary';
@@ -123,6 +106,7 @@ const TechnicianDashboard = () => {
 
   const getPriorityLabel = (priority: string) => {
     switch (priority) {
+      case 'critical': return 'Crítica';
       case 'high': return 'Alta';
       case 'medium': return 'Media';
       case 'low': return 'Baja';
