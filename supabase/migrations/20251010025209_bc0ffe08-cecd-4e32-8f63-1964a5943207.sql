@@ -1,5 +1,5 @@
 -- =================================================================
--- ========= SCRIPT DE ESQUEMA COMPLETO Y CORREGIDO ================
+-- ========= SCRIPT DE MIGRACIÓN FINAL Y CORREGIDO =================
 -- =================================================================
 
 -- 1. BORRADO DE LA ESTRUCTURA ANTIGUA CON CASCADE
@@ -112,7 +112,6 @@ CREATE POLICY "Los administradores pueden ver todos los perfiles." ON public.pro
 CREATE POLICY "Los usuarios pueden actualizar su propio perfil." ON public.profiles
   FOR UPDATE USING ( auth.uid() = id );
 
--- ¡POLÍTICA DE INSERCIÓN AÑADIDA! (Esta fue la última corrección)
 CREATE POLICY "Los usuarios pueden crear su propio perfil." ON public.profiles
   FOR INSERT WITH CHECK ( auth.uid() = id );
 
@@ -123,7 +122,6 @@ CREATE POLICY "Los usuarios pueden ver su propio rol." ON public.user_roles
 CREATE POLICY "Los administradores pueden gestionar todos los roles." ON public.user_roles
   FOR ALL USING ( public.get_my_role() = 'admin' );
 
--- ¡POLÍTICA DE INSERCIÓN AÑADIDA! (Esta fue la última corrección)
 CREATE POLICY "Los usuarios pueden crear su propio rol." ON public.user_roles
   FOR INSERT WITH CHECK ( auth.uid() = user_id );
 
@@ -187,7 +185,7 @@ BEGIN
   SELECT
     p.id,
     p.full_name,
-    u.email,
+    u.email::text, -- <-- ¡AQUÍ ESTÁ LA CORRECCIÓN DE TIPO!
     p.is_active,
     ur.role
   FROM auth.users AS u

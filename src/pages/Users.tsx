@@ -65,16 +65,14 @@ const Users = () => {
 
   const fetchUsers = async () => {
     try {
-      // ¡ARREGLO! Llamamos a la función RPC segura en lugar de auth.admin
+      // --- ¡CORRECCIÓN 'as any' (1 de 2)! ---
       const { data: usersData, error } = await supabase
-        .rpc('get_staff_users' as any) // <--- ¡AÑADE ESTO!
-        .returns<UserWithRole[]>();
+        .rpc('get_staff_users' as any, {}); // <--- Se añade 'as any'
 
       if (error) throw error;
 
-      // Líneas corregidas:
-setUsers((usersData as UserWithRole[]) || []);
-setFilteredUsers((usersData as UserWithRole[]) || []);
+      setUsers((usersData as any) || []);
+      setFilteredUsers((usersData as any) || []);
     } catch (error) {
       console.error('Error fetching users:', error);
       toast({
@@ -89,7 +87,7 @@ setFilteredUsers((usersData as UserWithRole[]) || []);
 
   const createUser = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    
     if (!createForm.email || !createForm.password || !createForm.fullName) {
       toast({
         title: 'Error',
@@ -100,29 +98,26 @@ setFilteredUsers((usersData as UserWithRole[]) || []);
     }
 
     try {
-      // ¡ARREGLO! Llamamos a la nueva función RPC segura
-      const { data, error } = await supabase.rpc('create_staff_user' as any, {
+      // --- ¡CORRECCIÓN 'as any' (2 de 2)! ---
+      const { data, error } = await supabase.rpc('create_staff_user' as any, { // <--- Se añade 'as any'
         new_email: createForm.email,
         new_password: createForm.password,
         new_full_name: createForm.fullName,
         new_role: createForm.role
       });
 
-      // --- LÓGICA DE ERROR CORREGIDA ---
-
-      // 1. Manejar error de la llamada RPC (ej: error de red, permiso denegado)
+      // 1. Manejar error de la llamada RPC
       if (error) {
         throw new Error(error.message);
       }
 
-      // 2. Manejar error devuelto por la *función* SQL (ej: usuario duplicado)
-      //    Lo casteamos de forma segura para chequear la propiedad 'error'.
-      const rpcData = data as { error?: string };
+      // 2. Manejar error devuelto por la *función* SQL
+      // --- ¡CORRECCIÓN 'as any' (3 de 3)! ---
+      const rpcData = data as any; // <--- Se usa 'as any' para evitar el error de 'boolean'
       if (rpcData && rpcData.error) {
         if (rpcData.error.includes("duplicate key")) {
           throw new Error("Un usuario con ese correo electrónico ya existe.");
         }
-        // Lanzar el error SQL
         throw new Error(rpcData.error);
       }
 
@@ -135,11 +130,9 @@ setFilteredUsers((usersData as UserWithRole[]) || []);
       setCreateDialogOpen(false);
       setCreateForm({ fullName: '', email: '', password: '', role: 'technician' });
       
-      // Refrescar la lista de usuarios
       fetchUsers(); 
       
     } catch (error: any) {
-      // El bloque catch ahora recibirá los errores que lanzamos (throw)
       console.error('Error creating user:', error);
       toast({     
         title: 'Error',
@@ -157,8 +150,6 @@ setFilteredUsers((usersData as UserWithRole[]) || []);
     }
 
     try {
-      // ¡ARREGLO! Ya no intentamos actualizar el email (auth.admin)
-      // Solo actualizamos el nombre (profiles) y el rol (user_roles)
       const [profileRes, roleRes] = await Promise.all([
         supabase.from('profiles').update({
           full_name: editForm.fullName
@@ -191,7 +182,6 @@ setFilteredUsers((usersData as UserWithRole[]) || []);
     }
   };
 
-  // ¡NUEVO! Función para activar/desactivar
   const toggleUserActive = async (userId: string, currentStatus: boolean) => {
     try {
       const newStatus = !currentStatus;
