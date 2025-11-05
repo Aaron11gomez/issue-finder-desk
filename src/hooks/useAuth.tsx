@@ -52,7 +52,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      // Marcamos la carga inicial como completa después de verificar la sesión.
       setLoading(false);
     });
 
@@ -72,54 +71,99 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // 3. Efecto separado para obtener datos y escuchar cambios de rol cuando el usuario cambia.
   useEffect(() => {
-    // Si no hay usuario, limpiar los datos y terminar.
     if (!user) {
       setProfile(null);
       setRole(null);
       return;
     }
 
-    // Función para obtener los datos del perfil y rol del usuario actual.
+    // =================================================================
+    // ========= ¡INICIO DE LA CORRECCIÓN DE PERFIL/ROL! ===============
+    // =================================================================
     const fetchUserData = async () => {
       try {
-        const [profileRes, roleRes] = await Promise.all([
-          supabase.from('profiles').select('*').eq('id', user.id).single(),
-          supabase.from('user_roles').select('role').eq('user_id', user.id).single()
-        ]);
+        // 1. OBTENER EL PERFIL
+        let profileData: Profile | null = null;
+        const { data: profileRes, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
 
-        if (profileRes.error || roleRes.error) {
-           console.error("Error fetching user data:", profileRes.error || roleRes.error);
-           // Si no se encuentra el perfil o rol (puede pasar justo después de registrarse)
-           // el trigger de la DB lo creará, y el realtime lo actualizará.
-           // No es un error crítico, pero lo dejamos en consola.
-        }
-
-        const profileData = profileRes.data;
-        if (profileData) {
-          if (!profileData.is_active) {
-            toast({
-              title: "Cuenta inactiva",
-              description: "Tu cuenta ha sido desactivada. Contacta al administrador.",
-              variant: "destructive"
-            });
-            await signOut();
-            return;
-          }
-          setProfile(profileData);
-        }
-
-        const roleData = roleRes.data;
-        if (roleData) {
-          setRole(roleData.role as UserRole);
+        if (profileError && profileError.code === 'PGRST116') {
+          // ¡El perfil no existe! Lo creamos.
+          console.warn("No profile found for user, creating one...");
+          const { data: newProfile, error: createError } = await supabase
+            .from('profiles')
+            .insert({
+              id: user.id,
+              full_name: user.user_metadata?.full_name || user.email || 'Usuario'
+            })
+            .select()
+            .single();
+          
+          if (createError) throw createError;
+          profileData = newProfile as Profile;
+        } else if (profileError) {
+          throw profileError;
         } else {
-          // Si no hay rol, por defecto es cliente (hasta que el realtime lo actualice si cambia)
-          setRole('client');
+          profileData = profileRes;
         }
 
-      } catch (error) {
+        // 2. VERIFICAR SI ESTÁ ACTIVO (basado en el perfil obtenido o recién creado)
+        if (profileData && !profileData.is_active) {
+          toast({
+            title: "Cuenta inactiva",
+            description: "Tu cuenta ha sido desactivada. Contacta al administrador.",
+            variant: "destructive"
+          });
+          await signOut();
+          return;
+        }
+        setProfile(profileData);
+
+        // 3. OBTENER EL ROL
+        let roleData: { role: UserRole } | null = null;
+        const { data: roleRes, error: roleError } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .single();
+
+        if (roleError && roleError.code === 'PGRST116') {
+          // ¡El rol no existe! Lo creamos con 'client' por defecto.
+          console.warn("No role found for user, creating one (default: client)...");
+          const { data: newRole, error: createRoleError } = await supabase
+            .from('user_roles')
+            .insert({
+              user_id: user.id,
+              role: 'client'
+            })
+            .select('role')
+            .single();
+          
+          if (createRoleError) throw createRoleError;
+          roleData = newRole as { role: UserRole };
+        } else if (roleError) {
+          throw roleError;
+        } else {
+          roleData = roleRes;
+        }
+        
+        setRole(roleData?.role || 'client');
+
+      } catch (error: any) {
         console.error('Error en fetchUserData:', error);
+        toast({
+          title: 'Error de autenticación',
+          description: `No se pudo cargar tu perfil: ${error.message}`,
+          variant: 'destructive',
+        });
       }
     };
+    // =================================================================
+    // ========= ¡FIN DE LA CORRECCIÓN! ===============================
+    // =================================================================
     
     fetchUserData();
 
@@ -142,13 +186,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             title: "Rol actualizado",
             description: `Tu rol ha sido cambiado a '${newRole}'. La página se recargará.`,
           });
-          // Recargar la página para reflejar los nuevos permisos y vistas.
           setTimeout(() => window.location.reload(), 2000);
         }
       )
       .subscribe();
 
-    // Función de limpieza para este efecto.
     return () => {
       if (roleUpdateChannel) {
         supabase.removeChannel(roleUpdateChannel);
