@@ -16,7 +16,6 @@ interface UserWithRole {
   id: string;
   full_name: string;
   email: string;
-  is_active: boolean;
   role: 'admin' | 'technician' | 'client';
 }
 
@@ -371,9 +370,6 @@ const Users = () => {
                         <Badge variant={getRoleColor(user.role)}>
                           {getRoleLabel(user.role)}
                         </Badge>
-                        <Badge variant={user.is_active ? 'secondary' : 'outline'}>
-                          {user.is_active ? 'Activo' : 'Inactivo'}
-                        </Badge>
                       </div>
                       <div className="flex gap-2">
                         <Button
@@ -383,30 +379,6 @@ const Users = () => {
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
-                        
-                        {/* ¡BOTÓN MEJORADO! */}
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="sm" variant="outline" title={user.is_active ? 'Desactivar' : 'Activar'}>
-                              {user.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                ¿Deseas {user.is_active ? 'desactivar' : 'activar'} la cuenta de {user.full_name}?
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => toggleUserActive(user.id, user.is_active)}>
-                                {user.is_active ? 'Desactivar' : 'Activar'}
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                        
                       </div>
                     </div>
                   </div>

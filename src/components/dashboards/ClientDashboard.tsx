@@ -32,9 +32,12 @@ interface Ticket {
   id: string;
   title: string;
   description: string;
-  priority: 'low' | 'medium' | 'high';
-  status: 'open' | 'in_progress' | 'closed';
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  status: 'open' | 'assigned' | 'closed';
   created_at: string;
+  created_by_id: string;
+  created_by_name: string;
+  created_by_email: string;
 }
 
 // --- MODIFICACIÓN: Componente Skeleton ---
@@ -71,7 +74,7 @@ const ClientDashboard = () => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    priority: 'medium' as 'low' | 'medium' | 'high'
+    priority: 'medium' as 'critical' | 'high' | 'medium' | 'low'
   });
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -85,7 +88,7 @@ const ClientDashboard = () => {
       const { data, error } = await supabase
         .from('tickets')
         .select('*')
-        .eq('created_by', user?.id)
+        .eq('created_by_id', user?.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -113,13 +116,21 @@ const ClientDashboard = () => {
     }
 
     try {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', user?.id)
+        .single();
+
       const { error } = await supabase
         .from('tickets')
         .insert({
           title: formData.title,
           description: formData.description,
           priority: formData.priority,
-          created_by: user?.id,
+          created_by_id: user?.id || '',
+          created_by_name: profileData?.full_name || '',
+          created_by_email: profileData?.email || '',
           status: 'open'
         });
 
@@ -146,7 +157,7 @@ const ClientDashboard = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'open': return 'default';
-      case 'in_progress': return 'secondary';
+      case 'assigned': return 'secondary';
       case 'closed': return 'outline';
       default: return 'default';
     }
@@ -155,7 +166,7 @@ const ClientDashboard = () => {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'open': return 'Abierto';
-      case 'in_progress': return 'En Progreso';
+      case 'assigned': return 'Asignado';
       case 'closed': return 'Cerrado';
       default: return status;
     }
@@ -163,6 +174,7 @@ const ClientDashboard = () => {
 
   const getPriorityLabel = (priority: string) => {
     switch (priority) {
+      case 'critical': return 'Crítica';
       case 'high': return 'Alta';
       case 'medium': return 'Media';
       case 'low': return 'Baja';
@@ -254,7 +266,7 @@ const ClientDashboard = () => {
                 <Label htmlFor="priority">Prioridad</Label>
                 <Select 
                   value={formData.priority} 
-                  onValueChange={(value: 'low' | 'medium' | 'high') => setFormData({ ...formData, priority: value })}
+                  onValueChange={(value: 'critical' | 'high' | 'medium' | 'low') => setFormData({ ...formData, priority: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -263,6 +275,7 @@ const ClientDashboard = () => {
                     <SelectItem value="low">Baja</SelectItem>
                     <SelectItem value="medium">Media</SelectItem>
                     <SelectItem value="high">Alta</SelectItem>
+                    <SelectItem value="critical">Crítica</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
