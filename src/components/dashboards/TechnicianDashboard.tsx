@@ -1,13 +1,15 @@
+/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/components/dashboards/TechnicianDashboard.tsx */
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card'; // <-- MODIFICACIÓN: CardHeader eliminado
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner'; // <-- MODIFICACIÓN: Cambiado a Sonner
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Inbox } from 'lucide-react'; // <-- MODIFICACIÓN: Importar Icono
 
 // --- NUEVOS IMPORTS PARA LA TABLA ---
 import {
@@ -18,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Skeleton } from '@/components/ui/skeleton'; // <-- MODIFICACIÓN: Importar Skeleton
 // --- FIN DE NUEVOS IMPORTS ---
 
 interface Ticket {
@@ -33,6 +36,36 @@ interface Ticket {
   } | null;
 }
 
+// --- MODIFICACIÓN: Componente Skeleton ---
+const TicketListSkeleton = () => (
+  <Table>
+    <TableHeader>
+      <TableRow>
+        <TableHead><Skeleton className="h-5 w-32" /></TableHead>
+        <TableHead><Skeleton className="h-5 w-24" /></TableHead>
+        <TableHead><Skeleton className="h-5 w-24" /></TableHead>
+        <TableHead><Skeleton className="h-5 w-32" /></TableHead>
+        <TableHead className="text-right"><Skeleton className="h-5 w-40 ml-auto" /></TableHead>
+      </TableRow>
+    </TableHeader>
+    <TableBody>
+      {[...Array(3)].map((_, i) => (
+        <TableRow key={i}>
+          <TableCell><Skeleton className="h-5 w-48" /></TableCell>
+          <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
+          <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+          <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+          <TableCell className="text-right space-x-2">
+            <Skeleton className="h-8 w-16 inline-block" />
+            <Skeleton className="h-8 w-24 inline-block" />
+          </TableCell>
+        </TableRow>
+      ))}
+    </TableBody>
+  </Table>
+);
+// --- FIN DE SKELETON ---
+
 const TechnicianDashboard = () => {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +77,7 @@ const TechnicianDashboard = () => {
   }, []);
 
   const fetchUnassignedTickets = async () => {
+    // ... (Lógica de fetch sin cambios)
     try {
       const { data: ticketsData, error: ticketsError } = await supabase
         .from('tickets')
@@ -74,10 +108,9 @@ const TechnicianDashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching tickets:', error);
-      toast({
-        title: 'Error',
+      /* --- MODIFICACIÓN: Toast de Sonner --- */
+      toast.error('Error', {
         description: 'No se pudieron cargar los tickets',
-        variant: 'destructive'
       });
     } finally {
       setLoading(false);
@@ -96,22 +129,22 @@ const TechnicianDashboard = () => {
 
       if (error) throw error;
 
-      toast({
-        title: 'Ticket asignado',
+      /* --- MODIFICACIÓN: Toast de Sonner --- */
+      toast.success('Ticket asignado', {
         description: 'El ticket ha sido asignado exitosamente',
       });
 
       fetchUnassignedTickets();
     } catch (error) {
       console.error('Error assigning ticket:', error);
-      toast({
-        title: 'Error',
+      /* --- MODIFICACIÓN: Toast de Sonner --- */
+      toast.error('Error', {
         description: 'No se pudo asignar el ticket',
-        variant: 'destructive'
       });
     }
   };
 
+  // ... (getPriorityColor y getPriorityLabel sin cambios)
   const getPriorityColor = (priority: string): "destructive" | "default" | "secondary" => {
     switch (priority) {
       case 'high': return 'destructive';
@@ -129,13 +162,30 @@ const TechnicianDashboard = () => {
       default: return priority;
     }
   };
+  // --- FIN DE HELPERS ---
 
+  // --- MODIFICACIÓN: Estado de carga con Skeleton ---
   if (loading) {
-    return <div>Cargando tickets...</div>;
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Tickets sin Asignar</h1>
+          <p className="text-muted-foreground mt-2">
+            Tickets pendientes de ser atendidos
+          </p>
+        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <TicketListSkeleton />
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
+  // --- FIN DE MODIFICACIÓN ---
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in"> {/* MODIFICACIÓN: Animación añadida */}
       <div>
         <h1 className="text-3xl font-bold">Tickets sin Asignar</h1>
         <p className="text-muted-foreground mt-2">
@@ -147,9 +197,15 @@ const TechnicianDashboard = () => {
       <Card>
         <CardContent className="pt-6">
           {tickets.length === 0 ? (
-            <p className="text-center text-muted-foreground">
-              No hay tickets sin asignar en este momento
-            </p>
+            /* --- MODIFICACIÓN: Estado vacío mejorado --- */
+            <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
+              <Inbox className="w-16 h-16 text-muted-foreground/50 mb-6" />
+              <h3 className="text-xl font-semibold">¡Bandeja limpia!</h3>
+              <p className="text-muted-foreground mt-2 max-w-sm">
+                No hay tickets sin asignar en este momento. ¡Buen trabajo!
+              </p>
+            </div>
+            /* --- FIN DE MODIFICACIÓN --- */
           ) : (
             <Table>
               <TableHeader>
@@ -163,7 +219,8 @@ const TechnicianDashboard = () => {
               </TableHeader>
               <TableBody>
                 {tickets.map((ticket) => (
-                  <TableRow key={ticket.id}>
+                  /* --- MODIFICACIÓN: Hover añadido --- */
+                  <TableRow key={ticket.id} className="transition-all hover:shadow-md hover:scale-[1.01]">
                     <TableCell className="font-medium">{ticket.title}</TableCell>
                     <TableCell>
                       <Badge variant={getPriorityColor(ticket.priority)}>
@@ -187,6 +244,7 @@ const TechnicianDashboard = () => {
                       </Button>
                     </TableCell>
                   </TableRow>
+                  /* --- FIN DE MODIFICACIÓN --- */
                 ))}
               </TableBody>
             </Table>

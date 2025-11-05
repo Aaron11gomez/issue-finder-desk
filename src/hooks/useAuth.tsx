@@ -1,8 +1,9 @@
+/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/hooks/useAuth.tsx */
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session, RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
-import { toast } from './use-toast';
+import { toast } from 'sonner'; // <-- MODIFICACIÓN: Importado de 'sonner'
 
 type UserRole = 'admin' | 'technician' | 'client';
 
@@ -41,8 +42,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setProfile(null);
     setRole(null);
     navigate('/auth');
-    toast({
-      title: "Sesión cerrada",
+    /* --- MODIFICACIÓN: Toast de Sonner --- */
+    toast.success("Sesión cerrada", {
       description: "Has cerrado sesión correctamente",
     });
   };
@@ -112,10 +113,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         // 2. VERIFICAR SI ESTÁ ACTIVO (basado en el perfil obtenido o recién creado)
         if (profileData && !profileData.is_active) {
-          toast({
-            title: "Cuenta inactiva",
+          /* --- MODIFICACIÓN: Toast de Sonner --- */
+          toast.error("Cuenta inactiva", {
             description: "Tu cuenta ha sido desactivada. Contacta al administrador.",
-            variant: "destructive"
+            duration: 5000,
           });
           await signOut();
           return;
@@ -154,10 +155,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       } catch (error: any) {
         console.error('Error en fetchUserData:', error);
-        toast({
-          title: 'Error de autenticación',
+        /* --- MODIFICACIÓN: Toast de Sonner --- */
+        toast.error('Error de autenticación', {
           description: `No se pudo cargar tu perfil: ${error.message}`,
-          variant: 'destructive',
         });
       }
     };
@@ -182,8 +182,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const newRole = payload.new.role as UserRole;
           console.log('Role changed via Realtime to:', newRole);
           setRole(newRole);
-          toast({
-            title: "Rol actualizado",
+          /* --- MODIFICACIÓN: Toast de Sonner --- */
+          toast.info("Rol actualizado", {
             description: `Tu rol ha sido cambiado a '${newRole}'. La página se recargará.`,
           });
           setTimeout(() => window.location.reload(), 2000);
@@ -205,8 +205,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
     
     if (!error) {
-      toast({
-        title: "Inicio de sesión exitoso",
+      /* --- MODIFICACIÓN: Toast de Sonner --- */
+      toast.success("Inicio de sesión exitoso", {
         description: "Bienvenido de vuelta",
       });
     }
@@ -227,8 +227,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
     
     if (!error) {
-      toast({
-        title: "Registro exitoso",
+      /* --- MODIFICACIÓN: Toast de Sonner --- */
+      toast.success("Registro exitoso", {
         description: "Tu cuenta ha sido creada",
       });
     }

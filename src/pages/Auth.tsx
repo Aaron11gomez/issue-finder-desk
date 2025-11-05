@@ -1,3 +1,4 @@
+/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/pages/Auth.tsx */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -7,6 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { z } from 'zod';
+import { cn } from '@/lib/utils'; // <-- MODIFICACIÓN: Importar cn
+import { Alert, AlertDescription } from '@/components/ui/alert'; // <-- MODIFICACIÓN: Importar Alert
+import { AlertCircle } from 'lucide-react'; // <-- MODIFICACIÓN: Importar icono
 
 const loginSchema = z.object({
   email: z.string().email('Correo electrónico inválido'),
@@ -93,7 +97,8 @@ const Auth = () => {
         setRegisterErrors({ general: error.message });
       }
     } else {
-      navigate('/dashboard');
+      /* --- MODIFICACIÓN: Navegación quitada, Sonner ya avisa --- */
+      // navigate('/dashboard'); // El hook de Auth ya redirige al detectar el usuario
     }
   };
 
@@ -150,6 +155,17 @@ const Auth = () => {
               
               <TabsContent value="login" className="pt-4">
                 <form onSubmit={handleLogin} className="space-y-4">
+                  {/* --- MODIFICACIÓN: Alert de error general --- */}
+                  {loginErrors.general && (
+                    <Alert variant="destructive" className="animate-fade-in">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        {loginErrors.general}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {/* --- FIN DE MODIFICACIÓN --- */}
+
                   <div className="space-y-2">
                     <Label htmlFor="login-email">Correo Electrónico</Label>
                     <Input
@@ -158,6 +174,8 @@ const Auth = () => {
                       placeholder="tu@email.com"
                       value={loginData.email}
                       onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+                      /* --- MODIFICACIÓN: Borde de error --- */
+                      className={cn(loginErrors.email && "border-destructive focus-visible:ring-destructive")}
                     />
                     {loginErrors.email && (
                       <p className="text-sm text-destructive">{loginErrors.email}</p>
@@ -172,15 +190,13 @@ const Auth = () => {
                       placeholder="••••••••"
                       value={loginData.password}
                       onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                      /* --- MODIFICACIÓN: Borde de error --- */
+                      className={cn(loginErrors.password && "border-destructive focus-visible:ring-destructive")}
                     />
                     {loginErrors.password && (
                       <p className="text-sm text-destructive">{loginErrors.password}</p>
                     )}
                   </div>
-
-                  {loginErrors.general && (
-                    <p className="text-sm text-destructive">{loginErrors.general}</p>
-                  )}
                   
                   <Button type="submit" className="w-full" disabled={loginLoading}>
                     {loginLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
@@ -190,6 +206,17 @@ const Auth = () => {
               
               <TabsContent value="register" className="pt-4">
                 <form onSubmit={handleRegister} className="space-y-4">
+                  {/* --- MODIFICACIÓN: Alert de error general --- */}
+                  {registerErrors.general && (
+                    <Alert variant="destructive" className="animate-fade-in">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        {registerErrors.general}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {/* --- FIN DE MODIFICACIÓN --- */}
+
                   <div className="space-y-2">
                     <Label htmlFor="register-name">Nombre Completo</Label>
                     <Input
@@ -198,6 +225,8 @@ const Auth = () => {
                       placeholder="Juan Pérez"
                       value={registerData.fullName}
                       onChange={(e) => setRegisterData({ ...registerData, fullName: e.target.value })}
+                      /* --- MODIFICACIÓN: Borde de error --- */
+                      className={cn(registerErrors.fullName && "border-destructive focus-visible:ring-destructive")}
                     />
                     {registerErrors.fullName && (
                       <p className="text-sm text-destructive">{registerErrors.fullName}</p>
@@ -212,6 +241,8 @@ const Auth = () => {
                       placeholder="tu@email.com"
                       value={registerData.email}
                       onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
+                      /* --- MODIFICACIÓN: Borde de error --- */
+                      className={cn(registerErrors.email && "border-destructive focus-visible:ring-destructive")}
                     />
                     {registerErrors.email && (
                       <p className="text-sm text-destructive">{registerErrors.email}</p>
@@ -226,15 +257,13 @@ const Auth = () => {
                       placeholder="••••••••"
                       value={registerData.password}
                       onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
+                      /* --- MODIFICACIÓN: Borde de error --- */
+                      className={cn(registerErrors.password && "border-destructive focus-visible:ring-destructive")}
                     />
                     {registerErrors.password && (
                       <p className="text-sm text-destructive">{registerErrors.password}</p>
                     )}
                   </div>
-
-                  {registerErrors.general && (
-                    <p className="text-sm text-destructive">{registerErrors.general}</p>
-                  )}
                   
                   <Button type="submit" className="w-full" disabled={registerLoading}>
                     {registerLoading ? 'Creando cuenta...' : 'Crear Cuenta'}

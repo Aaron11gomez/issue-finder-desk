@@ -1,3 +1,4 @@
+/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/components/Layout.tsx */
 import { ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -153,7 +154,8 @@ const Layout = ({ children }: LayoutProps) => {
           </header>
 
           {/* Contenido de la página */}
-          <main className="flex-1 p-4 sm:p-6 lg:p-8">
+          {/* --- MODIFICACIÓN: Animación añadida --- */}
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in">
             {children}
           </main>
         </SidebarInset>

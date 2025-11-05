@@ -1,3 +1,4 @@
+/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/tailwind.config.ts */
 import type { Config } from "tailwindcss";
 
 export default {
@@ -80,10 +81,25 @@ export default {
             height: "0",
           },
         },
+        /* --- MODIFICACIÓN AÑADIDA --- */
+        "fade-in": {
+          from: {
+            opacity: "0",
+            transform: "translateY(-10px)",
+          },
+          to: {
+            opacity: "1",
+            transform: "translateY(0)",
+          },
+        },
+        /* --- FIN DE MODIFICACIÓN --- */
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        /* --- MODIFICACIÓN AÑADIDA --- */
+        "fade-in": "fade-in 0.3s ease-out forwards",
+        /* --- FIN DE MODIFICACIÓN --- */
       },
     },
   },

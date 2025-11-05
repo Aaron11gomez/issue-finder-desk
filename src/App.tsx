@@ -1,4 +1,5 @@
-import { Toaster } from "@/components/ui/toaster";
+/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/App.tsx */
+/* --- MODIFICACIÓN: Toaster ELIMINADO --- */
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -16,8 +17,8 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
-      <Sonner />
+      {/* --- MODIFICACIÓN: Toaster ELIMINADO --- */}
+      <Sonner richColors closeButton /> {/* <-- MODIFICACIÓN: Props añadidas */}
       {/* El BrowserRouter DEBE envolver al AuthProvider */}
       <BrowserRouter>
         <AuthProvider>
@@ -37,4 +38,3 @@ const App = () => (
 );
 
 export default App;
-
