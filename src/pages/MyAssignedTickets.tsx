@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
@@ -9,6 +9,17 @@ import { toast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+
+// --- NUEVOS IMPORTS PARA LA TABLA ---
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+// --- FIN DE NUEVOS IMPORTS ---
 
 interface Ticket {
   id: string;
@@ -79,7 +90,7 @@ const MyAssignedTickets = () => {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
+  const getPriorityColor = (priority: string): "destructive" | "default" | "secondary" => {
     switch (priority) {
       case 'critical': return 'destructive';
       case 'high': return 'destructive';
@@ -107,49 +118,58 @@ const MyAssignedTickets = () => {
           </p>
         </div>
 
-        {tickets.length === 0 ? (
-          <Card>
-            <CardContent className="pt-6">
+        {/* --- RENDERIZADO MODIFICADO --- */}
+        <Card>
+          <CardContent className="pt-6">
+            {tickets.length === 0 ? (
               <p className="text-center text-muted-foreground">
                 No tienes tickets asignados en este momento
               </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-4">
-            {tickets.map((ticket) => (
-              <Card key={ticket.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <CardTitle className="text-xl">{ticket.title}</CardTitle>
-                      <div className="text-sm text-muted-foreground">
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Título</TableHead>
+                    <TableHead>Prioridad</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead className="text-right">Acción</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tickets.map((ticket) => (
+                    <TableRow key={ticket.id}>
+                      <TableCell className="font-medium">{ticket.title}</TableCell>
+                      <TableCell>
+                        <Badge variant={getPriorityColor(ticket.priority)}>
+                          {getPriorityLabel(ticket.priority)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusColor(ticket.status)}>
+                          {getStatusLabel(ticket.status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
                         {format(new Date(ticket.created_at), "d 'de' MMMM, yyyy", { locale: es })}
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Badge variant={getStatusColor(ticket.status)}>
-                        {getStatusLabel(ticket.status)}
-                      </Badge>
-                      <Badge variant={getPriorityColor(ticket.priority)}>
-                        {getPriorityLabel(ticket.priority)}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground mb-4">{ticket.description}</p>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate(`/ticket/${ticket.id}`)}
-                  >
-                    Ver Detalles
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/ticket/${ticket.id}`)}
+                        >
+                          Ver Detalles
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+        {/* --- FIN DE RENDERIZADO MODIFICADO --- */}
       </div>
     </Layout>
   );
