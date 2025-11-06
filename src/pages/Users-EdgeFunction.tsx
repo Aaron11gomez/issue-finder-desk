@@ -1,15 +1,16 @@
 /* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/pages/Users.tsx */
-/* --- SOLUCIÓN ALTERNATIVA SIN EDGE FUNCTIONS --- */
+/* --- CÓDIGO COMPLETO Y CORREGIDO --- */
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import { Plus, Edit, UserX, UserCheck, Search } from 'lucide-react';
+// --- CORRECCIÓN: Importar DialogDescription ---
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -100,110 +101,51 @@ const Users = () => {
     }
 
     try {
-      // Guardar la sesión actual del administrador
-      const { data: { session: adminSession } } = await supabase.auth.getSession();
+      // Obtener el token de sesión actual
+      const { data: { session } } = await supabase.auth.getSession();
       
-      if (!adminSession) {
+      if (!session) {
         throw new Error('No hay sesión activa');
       }
 
-      // Guardar tokens del admin
-      const adminAccessToken = adminSession.access_token;
-      const adminRefreshToken = adminSession.refresh_token;
+      // Llamar a la Edge Function para crear el usuario
+      // Esto NO iniciará sesión con el nuevo usuario
+      const { data, error } = await supabase.functions.invoke('create-staff-user', {
+        body: {
+          email: createForm.email,
+          password: createForm.password,
+          fullName: createForm.fullName,
+          role: createForm.role
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
 
       toast({
-        title: 'Creando usuario...',
-        description: 'Por favor espera, esto tomará unos segundos.',
+        title: 'Usuario creado',
+        description: 'El usuario ha sido creado exitosamente',
       });
-
-      // 1. Crear el nuevo usuario (esto cambiará la sesión temporalmente)
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: createForm.email,
-        password: createForm.password,
-        options: {
-          data: {
-            full_name: createForm.fullName
-          }
-        }
-      });
-
-      if (authError) {
-        if (authError.message.includes("already registered")) {
-          throw new Error("Un usuario con ese correo electrónico ya existe.");
-        }
-        throw authError;
-      }
-
-      if (!authData.user) {
-        throw new Error("No se pudo crear el usuario.");
-      }
-
-      const newUserId = authData.user.id;
-
-      // 2. Inmediatamente restaurar la sesión del administrador
-      await supabase.auth.setSession({
-        access_token: adminAccessToken,
-        refresh_token: adminRefreshToken
-      });
-
-      // 3. Esperar un momento para que la sesión se restaure
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // 4. Actualizar el rol del nuevo usuario
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .update({ role: createForm.role })
-        .eq('user_id', newUserId);
-
-      if (roleError) {
-        console.error('Error updating role:', roleError);
-        toast({
-          title: 'Advertencia',
-          description: 'Usuario creado pero el rol no se pudo actualizar. Por favor, edítalo manualmente.',
-          variant: 'destructive'
-        });
-      } else {
-        toast({
-          title: 'Usuario creado',
-          description: 'El usuario ha sido creado exitosamente con el rol correcto.',
-        });
-      }
 
       setCreateDialogOpen(false);
       setCreateForm({ fullName: '', email: '', password: '', role: 'technician' });
 
-      // Recargar usuarios después de un breve delay
-      setTimeout(() => {
-        fetchUsers();
-      }, 1000);
+      fetchUsers(); // Recargar la lista de usuarios
 
     } catch (error: any) {
       console.error('Error creating user:', error);
-      
-      // Intentar restaurar la sesión del admin en caso de error
-      try {
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        if (!currentSession) {
-          // Si no hay sesión, recargar la página para forzar re-autenticación
-          toast({
-            title: 'Error',
-            description: 'Ocurrió un error. La página se recargará.',
-            variant: 'destructive'
-          });
-          setTimeout(() => window.location.reload(), 2000);
-        }
-      } catch (restoreError) {
-        console.error('Error restoring session:', restoreError);
-      }
-
-      toast({
+      toast({     
         title: 'Error al crear usuario',
         description: error.message || 'No se pudo crear el usuario',
         variant: 'destructive'
       });
     }
   };
-
   const updateUser = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -328,6 +270,7 @@ const Users = () => {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Crear Nuevo Personal</DialogTitle>
+                {/* --- CORRECCIÓN: Añadida DialogDescription --- */}
                 <DialogDescription>
                   Crea una nueva cuenta de técnico o administrador. Se le asignará una contraseña provisional.
                 </DialogDescription>
@@ -486,6 +429,7 @@ const Users = () => {
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
+
                       </div>
                     </div>
                   </div>
@@ -495,10 +439,12 @@ const Users = () => {
           </CardContent>
         </Card>
 
+        {/* DIÁLOGO DE EDICIÓN (ACTUALIZADO) */}
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Editar Personal</DialogTitle>
+              {/* --- CORRECCIÓN: Añadida DialogDescription --- */}
               <DialogDescription>
                 Modifica el nombre y el rol del usuario. El correo electrónico no se puede cambiar.
               </DialogDescription>

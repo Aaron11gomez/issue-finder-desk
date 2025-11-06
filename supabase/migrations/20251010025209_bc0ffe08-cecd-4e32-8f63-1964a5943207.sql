@@ -222,7 +222,7 @@ BEGIN
   END IF;
 
   -- Crear el usuario en auth.users
-  new_user_id := auth.admin_create_user(new_email, new_password, jsonb_build_object('full_name', new_full_name));
+  new_user_id := auth.admin.create_user(new_email, new_password, jsonb_build_object('full_name', new_full_name));
 
   -- El trigger 'on_auth_user_created' ya creó el perfil
   -- y el rol de 'client'.
