@@ -1,15 +1,14 @@
-/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/components/dashboards/ClientDashboard.tsx */
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card'; // Card/CardContent se mantiene para el estado vacío
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
-import { toast } from 'sonner'; // <-- MODIFICACIÓN: Cambiado a Sonner
+import { toast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Plus, FileText } from 'lucide-react'; // <-- MODIFICACIÓN: Importar FileText
+import { Plus } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -25,7 +24,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Skeleton } from '@/components/ui/skeleton'; // <-- MODIFICACIÓN: Importar Skeleton
 // --- FIN DE NUEVOS IMPORTS ---
 
 interface Ticket {
@@ -33,39 +31,10 @@ interface Ticket {
   title: string;
   description: string;
   priority: 'critical' | 'high' | 'medium' | 'low';
-  status: 'open' | 'assigned' | 'closed';
+  status: 'open' | 'in_progress' | 'closed'; // MODIFICADO: 'assigned' ahora es 'in_progress'
   created_at: string;
-  created_by_id: string;
-  created_by_name: string;
-  created_by_email: string;
+  created_by: string; // MODIFICADO: 'created_by_id' ahora es 'created_by'
 }
-
-// --- MODIFICACIÓN: Componente Skeleton ---
-const TicketListSkeleton = () => (
-  <Table>
-    <TableHeader>
-      <TableRow>
-        <TableHead><Skeleton className="h-5 w-32" /></TableHead>
-        <TableHead><Skeleton className="h-5 w-24" /></TableHead>
-        <TableHead><Skeleton className="h-5 w-24" /></TableHead>
-        <TableHead><Skeleton className="h-5 w-32" /></TableHead>
-        <TableHead className="text-right"><Skeleton className="h-5 w-20 ml-auto" /></TableHead>
-      </TableRow>
-    </TableHeader>
-    <TableBody>
-      {[...Array(3)].map((_, i) => (
-        <TableRow key={i}>
-          <TableCell><Skeleton className="h-5 w-48" /></TableCell>
-          <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
-          <TableCell><Skeleton className="h-6 w-24 rounded-full" /></TableCell>
-          <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-          <TableCell className="text-right"><Skeleton className="h-8 w-20 ml-auto" /></TableCell>
-        </TableRow>
-      ))}
-    </TableBody>
-  </Table>
-);
-// --- FIN DE SKELETON ---
 
 const ClientDashboard = () => {
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -88,76 +57,80 @@ const ClientDashboard = () => {
       const { data, error } = await supabase
         .from('tickets')
         .select('*')
-        .eq('created_by_id', user?.id)
+        .eq('created_by', user?.id) // MODIFICADO: 'created_by_id' a 'created_by'
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       setTickets(data || []);
     } catch (error) {
       console.error('Error fetching tickets:', error);
-      /* --- MODIFICACIÓN: Toast de Sonner --- */
-      toast.error('Error', {
+      toast({
+        title: 'Error',
         description: 'No se pudieron cargar los tickets',
+        variant: 'destructive'
       });
     } finally {
       setLoading(false);
     }
   };
 
+  // =================================================================
+  // ========= ¡INICIO DE LA MODIFICACIÓN IMPORTANTE! ================
+  // =================================================================
   const createTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.title || !formData.description) {
-      /* --- MODIFICACIÓN: Toast de Sonner --- */
-      toast.error('Error', {
+      toast({
+        title: 'Error',
         description: 'Por favor completa todos los campos',
+        variant: 'destructive'
       });
       return;
     }
 
     try {
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('full_name, email')
-        .eq('id', user?.id)
-        .single();
-
+      // Ya no necesitamos buscar el perfil.
+      // Insertamos usando las columnas correctas ('created_by' y 'status')
+      // que coinciden con tu nueva migración.
       const { error } = await supabase
         .from('tickets')
         .insert({
           title: formData.title,
           description: formData.description,
           priority: formData.priority,
-          created_by_id: user?.id || '',
-          created_by_name: profileData?.full_name || '',
-          created_by_email: profileData?.email || '',
-          status: 'open'
+          created_by: user?.id || '', // <-- ESTA ES LA COLUMNA CORRECTA
+          status: 'open' // <-- El 'status' por defecto es 'open'
         });
 
       if (error) throw error;
 
-      /* --- MODIFICACIÓN: Toast de Sonner --- */
-      toast.success('Ticket creado', {
+      toast({
+        title: 'Ticket creado',
         description: 'Tu ticket ha sido creado exitosamente',
       });
 
       setDialogOpen(false);
       setFormData({ title: '', description: '', priority: 'medium' });
       fetchMyTickets();
-    } catch (error) {
+
+    } catch (error: any) { // Se añade 'any' para poder leer 'error.message'
       console.error('Error creating ticket:', error);
-      /* --- MODIFICACIÓN: Toast de Sonner --- */
-      toast.error('Error', {
-        description: 'No se pudo crear el ticket',
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo crear el ticket', // Damos un error más específico
+        variant: 'destructive'
       });
     }
   };
+  // =================================================================
+  // ========= ¡FIN DE LA MODIFICACIÓN IMPORTANTE! ===================
+  // =================================================================
 
-  // ... (getStatusColor, getStatusLabel, getPriorityLabel, getPriorityColor sin cambios)
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'open': return 'default';
-      case 'assigned': return 'secondary';
+      case 'in_progress': return 'secondary'; // MODIFICADO
       case 'closed': return 'outline';
       default: return 'default';
     }
@@ -166,7 +139,7 @@ const ClientDashboard = () => {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'open': return 'Abierto';
-      case 'assigned': return 'Asignado';
+      case 'in_progress': return 'En Progreso'; // MODIFICADO
       case 'closed': return 'Cerrado';
       default: return status;
     }
@@ -184,42 +157,20 @@ const ClientDashboard = () => {
   
   const getPriorityColor = (priority: string): "destructive" | "default" | "secondary" => {
     switch (priority) {
+      case 'critical': return 'destructive'; // Añadido
       case 'high': return 'destructive';
       case 'medium': return 'default';
       case 'low': return 'secondary';
       default: return 'default';
     }
   };
-  // --- FIN DE HELPERS ---
 
-  // --- MODIFICACIÓN: Estado de carga con Skeleton ---
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Mis Tickets</h1>
-            <p className="text-muted-foreground mt-2">
-              Administra tus solicitudes de soporte
-            </p>
-          </div>
-          <Button disabled>
-            <Plus className="w-4 h-4 mr-2" />
-            Crear Nuevo Ticket
-          </Button>
-        </div>
-        <Card>
-          <CardContent className="pt-6">
-            <TicketListSkeleton />
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <div>Cargando tickets...</div>;
   }
-  // --- FIN DE MODIFICACIÓN ---
 
   return (
-    <div className="space-y-6 animate-fade-in"> {/* MODIFICACIÓN: Animación añadida */}
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Mis Tickets</h1>
@@ -240,7 +191,6 @@ const ClientDashboard = () => {
               <DialogTitle>Crear Nuevo Ticket</DialogTitle>
             </DialogHeader>
             <form onSubmit={createTicket} className="space-y-4">
-              {/* ... (Formulario de creación sin cambios) ... */}
               <div className="space-y-2">
                 <Label htmlFor="title">Título</Label>
                 <Input
@@ -288,20 +238,12 @@ const ClientDashboard = () => {
         </Dialog>
       </div>
 
-      {/* --- RENDERIZADO MODIFICADO --- */}
       <Card>
         <CardContent className="pt-6">
           {tickets.length === 0 ? (
-            /* --- MODIFICACIÓN: Estado vacío mejorado --- */
-            <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
-              <FileText className="w-16 h-16 text-muted-foreground/50 mb-6" />
-              <h3 className="text-xl font-semibold">No hay tickets creados</h3>
-              <p className="text-muted-foreground mt-2 max-w-sm">
-                Parece que no has creado ninguna solicitud de soporte todavía.
-                ¡Crea tu primer ticket para comenzar!
-              </p>
-            </div>
-            /* --- FIN DE MODIFICACIÓN --- */
+            <p className="text-center text-muted-foreground">
+              No tienes tickets creados aún. ¡Crea uno nuevo para comenzar!
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -315,12 +257,7 @@ const ClientDashboard = () => {
               </TableHeader>
               <TableBody>
                 {tickets.map((ticket) => (
-                  /* --- MODIFICACIÓN: Fila clickeable y con hover --- */
-                  <TableRow 
-                    key={ticket.id} 
-                    className="transition-all hover:shadow-md hover:scale-[1.01] cursor-pointer"
-                    onClick={() => navigate(`/ticket/${ticket.id}`)}
-                  >
+                  <TableRow key={ticket.id}>
                     <TableCell className="font-medium">{ticket.title}</TableCell>
                     <TableCell>
                       <Badge variant={getPriorityColor(ticket.priority)}>
@@ -339,19 +276,18 @@ const ClientDashboard = () => {
                       <Button 
                         variant="outline" 
                         size="sm"
+                        onClick={() => navigate(`/ticket/${ticket.id}`)}
                       >
                         Ver Detalles
                       </Button>
                     </TableCell>
                   </TableRow>
-                  /* --- FIN DE MODIFICACIÓN --- */
                 ))}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
-      {/* --- FIN DE RENDERIZADO MODIFICADO --- */}
     </div>
   );
 };

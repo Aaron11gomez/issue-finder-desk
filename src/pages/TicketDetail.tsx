@@ -14,19 +14,29 @@ import { es } from 'date-fns/locale';
 import { ArrowLeft, Send, User, CalendarDays, Ticket as TicketIcon, ShieldCheck, Clock } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'; // <-- NUEVO IMPORT
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+
+// =================================================================
+// ========= ¡INICIO DE LA MODIFICACIÓN DE INTERFACES! =============
+// =================================================================
+
+interface ProfileStub {
+  full_name: string;
+}
 
 interface Ticket {
   id: string;
   title: string;
   description: string;
   priority: 'critical' | 'high' | 'medium' | 'low';
-  status: 'open' | 'assigned' | 'closed';
+  status: 'open' | 'in_progress' | 'closed';
   created_at: string;
-  created_by_id: string;
-  created_by_name: string;
-  created_by_email: string;
-  assigned_to_id: string | null;
+  created_by: string;
+  assigned_to: string | null;
+  resolution_summary: string | null;
+  // Perfiles que cargaremos con la consulta corregida
+  creator: ProfileStub | null;
+  assignee: ProfileStub | null;
 }
 
 interface Comment {
@@ -34,11 +44,14 @@ interface Comment {
   content: string;
   created_at: string;
   user_id: string;
-  profiles: { full_name: string } | null;
-  role?: string;
+  is_internal: boolean;
+  // Perfil que cargaremos con la consulta corregida
+  profiles: ProfileStub | null;
 }
+// =================================================================
+// ========= ¡FIN DE LA MODIFICACIÓN DE INTERFACES! ================
+// =================================================================
 
-// --- NUEVA FUNCIÓN HELPER ---
 const getInitials = (name: string | undefined) => {
   if (!name) return '?';
   return name
@@ -47,7 +60,6 @@ const getInitials = (name: string | undefined) => {
     .join('')
     .toUpperCase();
 };
-// --- FIN DE NUEVA FUNCIÓN ---
 
 const TicketDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -57,20 +69,34 @@ const TicketDetail = () => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
+  const [newInternalNote, setNewInternalNote] = useState('');
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (id) {
+    if (id && user) { // Asegúrate de que el usuario esté cargado
       fetchTicketDetails();
       fetchComments();
     }
-  }, [id]);
+  }, [id, user]); // Se ejecuta si 'id' o 'user' cambian
 
+  // =================================================================
+  // ========= ¡INICIO DE LA MODIFICACIÓN DE QUERIES! ================
+  // =================================================================
   const fetchTicketDetails = async () => {
+    if (!id || !user) return; // Añadido doble check
+
+    setLoading(true); // Poner loading al inicio
     try {
+      // Consulta corregida para traer los perfiles relacionados
+      // La relación es: tickets.created_by -> auth.users.id <- profiles.id
+      // Le decimos a Supabase que 'created_by' es la clave para 'profiles'
       const { data: ticketData, error } = await supabase
         .from('tickets')
-        .select('*')
+        .select(`
+          *,
+          creator:profiles!created_by( full_name ),
+          assignee:profiles!assigned_to( full_name )
+        `)
         .eq('id', id)
         .single();
 
@@ -78,8 +104,8 @@ const TicketDetail = () => {
 
       if (ticketData) {
         const canView = 
-          ticketData.created_by_id === user?.id || 
-          ticketData.assigned_to_id === user?.id;
+          ticketData.created_by === user.id || 
+          role === 'admin' || role === 'technician';
 
         if (!canView) {
           toast({
@@ -90,14 +116,13 @@ const TicketDetail = () => {
           navigate('/dashboard');
           return;
         }
-
-        setTicket(ticketData);
+        setTicket(ticketData as any);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching ticket:', error);
       toast({
-        title: 'Error',
-        description: 'No se pudo cargar el ticket',
+        title: 'Error al cargar ticket',
+        description: error.message || 'No se pudo cargar el ticket',
         variant: 'destructive'
       });
     } finally {
@@ -106,22 +131,38 @@ const TicketDetail = () => {
   };
 
   const fetchComments = async () => {
+    if (!id) return;
     try {
+      // Consulta corregida para traer el perfil de cada comentario
+      // La relación es: comments.user_id -> auth.users.id <- profiles.id
       const { data: commentsData, error } = await supabase
         .from('comments')
-        .select('*, profiles(full_name)') // <-- Se optimizó la query para traer el perfil
+        .select(`
+          *,
+          profiles:profiles!user_id ( full_name )
+        `)
         .eq('ticket_id', id)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
       setComments((commentsData as any) || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching comments:', error);
+      toast({
+        title: 'Error al cargar comentarios',
+        description: error.message || 'No se pudieron cargar los comentarios',
+        variant: 'destructive'
+      });
     }
   };
+  // =================================================================
+  // ========= ¡FIN DE LA MODIFICACIÓN DE QUERIES! ===================
+  // =================================================================
 
-  const addComment = async () => {
-    if (!newComment.trim()) {
+  const addComment = async (isInternal: boolean) => {
+    const content = isInternal ? newInternalNote : newComment;
+
+    if (!content.trim()) {
       toast({
         title: 'Error',
         description: 'El comentario no puede estar vacío',
@@ -145,7 +186,8 @@ const TicketDetail = () => {
         .insert({
           ticket_id: id,
           user_id: user?.id,
-          content: newComment
+          content: content,
+          is_internal: isInternal
         });
 
       if (error) throw error;
@@ -162,11 +204,11 @@ const TicketDetail = () => {
       }
       
       fetchComments(); // Volver a cargar comentarios
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding comment:', error);
       toast({
         title: 'Error',
-        description: 'No se pudo agregar el comentario',
+        description: error.message || 'No se pudo agregar el comentario',
         variant: 'destructive'
       });
     }
@@ -174,6 +216,7 @@ const TicketDetail = () => {
 
   const closeTicket = async () => {
     try {
+      // Este update está bien, solo cambia el status.
       const { error } = await supabase
         .from('tickets')
         .update({ status: 'closed' })
@@ -188,21 +231,20 @@ const TicketDetail = () => {
 
       setCloseDialogOpen(false);
       fetchTicketDetails(); // Volver a cargar los detalles del ticket
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error closing ticket:', error);
       toast({
         title: 'Error',
-        description: 'No se pudo cerrar el ticket',
+        description: error.message || 'No se pudo cerrar el ticket',
         variant: 'destructive'
       });
     }
   };
 
-  // --- FUNCIONES HELPER (SIN CAMBIOS) ---
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'open': return 'Abierto';
-      case 'assigned': return 'Asignado';
+      case 'in_progress': return 'En Progreso';
       case 'closed': return 'Cerrado';
       default: return status;
     }
@@ -229,26 +271,26 @@ const TicketDetail = () => {
 
   const getPriorityColor = (priority: string): "destructive" | "default" | "secondary" => {
     switch (priority) {
+      case 'critical': return 'destructive';
       case 'high': return 'destructive';
       case 'medium': return 'default';
       case 'low': return 'secondary';
       default: return 'default';
     }
   };
-  // --- FIN DE FUNCIONES HELPER ---
-
 
   if (loading || !ticket) {
     return (
       <Layout>
+        {/* Muestra "Cargando..." que coincide con tu captura */}
         <div>Cargando...</div>
       </Layout>
     );
   }
 
-  const canCloseTicket = (role === 'admin' || role === 'technician') && ticket.status === 'assigned';
+  const canCloseTicket = (role === 'admin' || role === 'technician') && ticket.status === 'in_progress';
+  const canAddInternalNotes = role === 'admin' || role === 'technician';
 
-  // --- RENDERIZADO COMPLETAMENTE MODIFICADO ---
   return (
     <Layout>
       <div className="space-y-6">
@@ -278,13 +320,10 @@ const TicketDetail = () => {
           )}
         </div>
 
-        {/* --- NUEVO LAYOUT DE 2 COLUMNAS --- */}
         <div className="grid grid-cols-1 lg:grid-cols-3 lg:gap-6 items-start">
           
-          {/* --- COLUMNA PRINCIPAL (IZQUIERDA) --- */}
           <div className="lg:col-span-2 flex flex-col gap-6">
             
-            {/* --- Tarjeta de Título y Descripción --- */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-2xl">{ticket.title}</CardTitle>
@@ -309,7 +348,6 @@ const TicketDetail = () => {
               </CardContent>
             </Card>
 
-            {/* --- Tarjeta de Comentarios Públicos --- */}
             <Card>
               <CardHeader>
                 <CardTitle>Comentarios</CardTitle>
@@ -358,7 +396,6 @@ const TicketDetail = () => {
               )}
             </Card>
 
-            {/* --- Tarjeta de Notas Internas (Solo para staff) --- */}
             {canAddInternalNotes && (
               <Card>
                 <CardHeader>
@@ -414,7 +451,6 @@ const TicketDetail = () => {
 
           </div>
 
-          {/* --- COLUMNA LATERAL (DERECHA) --- */}
           <div className="lg:col-span-1 lg:sticky lg:top-8 space-y-6">
             <Card>
               <CardHeader>
@@ -441,12 +477,14 @@ const TicketDetail = () => {
                   <div className="flex items-center gap-2 text-sm">
                     <User className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground mr-1">Creado por:</span>
+                    {/* CORREGIDO: Leer desde el objeto 'creator' */}
                     <span className="font-medium">{ticket.creator?.full_name || 'Desconocido'}</span>
                   </div>
                   
                   <div className="flex items-center gap-2 text-sm">
                     <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground mr-1">Asignado a:</span>
+                    {/* CORREGIDO: Leer desde el objeto 'assignee' */}
                     <span className="font-medium">{ticket.assignee?.full_name || 'Sin asignar'}</span>
                   </div>
 
