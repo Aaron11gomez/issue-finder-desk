@@ -1,3 +1,5 @@
+/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/pages/Users.tsx */
+/* --- CÓDIGO COMPLETO Y CORREGIDO --- */
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
@@ -8,15 +10,18 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import { Plus, Edit, UserX, UserCheck, Search } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+// --- CORRECCIÓN: Importar DialogDescription ---
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { cn } from '@/lib/utils';
 
 interface UserWithRole {
   id: string;
   full_name: string;
   email: string;
   role: 'admin' | 'technician' | 'client';
+  is_active: boolean;
 }
 
 const Users = () => {
@@ -24,7 +29,7 @@ const Users = () => {
   const [filteredUsers, setFilteredUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string>('all'); // 'all' ahora significa 'admin' y 'technician'
+  const [roleFilter, setRoleFilter] = useState<string>('all');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithRole | null>(null);
@@ -33,7 +38,7 @@ const Users = () => {
     fullName: '',
     email: '',
     password: '',
-    role: 'technician' as 'admin' | 'technician' | 'client' // Por defecto técnico
+    role: 'technician' as 'admin' | 'technician' | 'client'
   });
 
   const [editForm, setEditForm] = useState({
@@ -64,19 +69,18 @@ const Users = () => {
 
   const fetchUsers = async () => {
     try {
-      // --- ¡CORRECCIÓN 'as any' (1 de 2)! ---
       const { data: usersData, error } = await supabase
-        .rpc('get_staff_users' as any, {}); // <--- Se añade 'as any'
+        .rpc('get_staff_users' as any, {}); 
 
       if (error) throw error;
 
       setUsers((usersData as any) || []);
       setFilteredUsers((usersData as any) || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching users:', error);
       toast({
         title: 'Error',
-        description: 'No se pudieron cargar los usuarios. Revisa la consola.',
+        description: error.message || 'No se pudieron cargar los usuarios. Revisa la consola.',
         variant: 'destructive'
       });
     } finally {
@@ -97,22 +101,19 @@ const Users = () => {
     }
 
     try {
-      // --- ¡CORRECCIÓN 'as any' (2 de 2)! ---
-      const { data, error } = await supabase.rpc('create_staff_user' as any, { // <--- Se añade 'as any'
+      // Esta llamada RPC usará la función SQL que acabas de corregir
+      const { data, error } = await supabase.rpc('create_staff_user' as any, {
         new_email: createForm.email,
         new_password: createForm.password,
         new_full_name: createForm.fullName,
         new_role: createForm.role
       });
 
-      // 1. Manejar error de la llamada RPC
       if (error) {
         throw new Error(error.message);
       }
 
-      // 2. Manejar error devuelto por la *función* SQL
-      // --- ¡CORRECCIÓN 'as any' (3 de 3)! ---
-      const rpcData = data as any; // <--- Se usa 'as any' para evitar el error de 'boolean'
+      const rpcData = data as any;
       if (rpcData && rpcData.error) {
         if (rpcData.error.includes("duplicate key")) {
           throw new Error("Un usuario con ese correo electrónico ya existe.");
@@ -120,7 +121,6 @@ const Users = () => {
         throw new Error(rpcData.error);
       }
 
-      // 3. Si no hay errores, fue un éxito
       toast({
         title: 'Usuario creado',
         description: 'El usuario ha sido creado exitosamente',
@@ -134,7 +134,7 @@ const Users = () => {
     } catch (error: any) {
       console.error('Error creating user:', error);
       toast({     
-        title: 'Error',
+        title: 'Error al crear usuario',
         description: error.message || 'No se pudo crear el usuario',
         variant: 'destructive'
       });
@@ -149,19 +149,21 @@ const Users = () => {
     }
 
     try {
-      const [profileRes, roleRes] = await Promise.all([
-        supabase.from('profiles').update({
-          full_name: editForm.fullName
-        }).eq('id', selectedUser.id),
+      const profilePromise = supabase.from('profiles').update({
+        full_name: editForm.fullName
+      }).eq('id', selectedUser.id);
         
-        supabase.from('user_roles').update({
-          role: editForm.role
-        }).eq('user_id', selectedUser.id)
+      const rolePromise = supabase.from('user_roles').update({
+        role: editForm.role
+      }).eq('user_id', selectedUser.id);
+
+      const [profileRes, roleRes] = await Promise.all([
+        profilePromise,
+        rolePromise
       ]);
 
-      if (profileRes.error || roleRes.error) {
-        throw profileRes.error || roleRes.error;
-      }
+      if (profileRes.error) throw profileRes.error;
+      if (roleRes.error) throw roleRes.error;
 
       toast({
         title: 'Usuario actualizado',
@@ -181,24 +183,27 @@ const Users = () => {
     }
   };
 
-  const toggleUserActive = async (userId: string, currentStatus: boolean) => {
+  const toggleUserActive = async (user: UserWithRole) => {
     try {
-      const newStatus = !currentStatus;
-      await supabase.from('profiles').update({
+      const newStatus = !user.is_active;
+      
+      const { error } = await supabase.from('profiles').update({
         is_active: newStatus
-      }).eq('id', userId);
+      }).eq('id', user.id);
+
+      if (error) throw error;
 
       toast({
         title: newStatus ? 'Usuario Activado' : 'Usuario Desactivado',
-        description: `El usuario ha sido ${newStatus ? 'activado' : 'desactivado'}.`,
+        description: `El usuario ${user.full_name} ha sido ${newStatus ? 'activado' : 'desactivado'}.`,
       });
 
-      fetchUsers();
-    } catch (error) {
+      fetchUsers(); 
+    } catch (error: any) {
       console.error('Error toggling user status:', error);
       toast({
         title: 'Error',
-        description: 'No se pudo cambiar el estado del usuario',
+        description: error.message || 'No se pudo cambiar el estado del usuario',
         variant: 'destructive'
       });
     }
@@ -213,7 +218,7 @@ const Users = () => {
     }
   };
 
-  const getRoleColor = (role: string) => {
+  const getRoleColor = (role: string): "destructive" | "default" | "secondary" => {
     switch (role) {
       case 'admin': return 'destructive';
       case 'technician': return 'default';
@@ -260,6 +265,10 @@ const Users = () => {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Crear Nuevo Personal</DialogTitle>
+                {/* --- CORRECCIÓN: Añadida DialogDescription --- */}
+                <DialogDescription>
+                  Crea una nueva cuenta de técnico o administrador. Se le asignará una contraseña provisional.
+                </DialogDescription>
               </DialogHeader>
               <form onSubmit={createUser} className="space-y-4">
                 <div className="space-y-2">
@@ -335,7 +344,6 @@ const Users = () => {
                 </div>
               </div>
               <div className="w-full md:w-48">
-                {/* ¡FILTRO MEJORADO! */}
                 <Select value={roleFilter} onValueChange={setRoleFilter}>
                   <SelectTrigger>
                     <SelectValue />
@@ -359,7 +367,10 @@ const Users = () => {
                 filteredUsers.map((user) => (
                   <div
                     key={user.id}
-                    className="flex items-center justify-between p-4 border rounded-lg"
+                    className={cn(
+                      "flex items-center justify-between p-4 border rounded-lg",
+                      !user.is_active && "opacity-50 bg-muted/50"
+                    )}
                   >
                     <div className="flex-1">
                       <h3 className="font-semibold">{user.full_name}</h3>
@@ -370,6 +381,9 @@ const Users = () => {
                         <Badge variant={getRoleColor(user.role)}>
                           {getRoleLabel(user.role)}
                         </Badge>
+                        <Badge variant={user.is_active ? "secondary" : "outline"}>
+                          {user.is_active ? "Activo" : "Inactivo"}
+                        </Badge>
                       </div>
                       <div className="flex gap-2">
                         <Button
@@ -379,6 +393,38 @@ const Users = () => {
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
+                        
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant={user.is_active ? "destructive" : "secondary"}
+                              title={user.is_active ? "Desactivar usuario" : "Activar usuario"}
+                            >
+                              {user.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Vas a {user.is_active ? 'desactivar' : 'activar'} la cuenta de 
+                                <span className="font-medium"> {user.full_name}</span>. 
+                                {user.is_active ? ' El usuario no podrá iniciar sesión.' : ' El usuario podrá volver a iniciar sesión.'}
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => toggleUserActive(user)}
+                                className={cn(user.is_active && "bg-destructive text-destructive-foreground")}
+                              >
+                                Confirmar {user.is_active ? 'Desactivación' : 'Activación'}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+
                       </div>
                     </div>
                   </div>
@@ -393,6 +439,10 @@ const Users = () => {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Editar Personal</DialogTitle>
+              {/* --- CORRECCIÓN: Añadida DialogDescription --- */}
+              <DialogDescription>
+                Modifica el nombre y el rol del usuario. El correo electrónico no se puede cambiar.
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={updateUser} className="space-y-4">
               <div className="space-y-2">
@@ -403,8 +453,6 @@ const Users = () => {
                   onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
                 />
               </div>
-
-              {/* El campo de Email se elimina porque no se puede cambiar desde el cliente */}
 
               <div className="space-y-2">
                 <Label htmlFor="edit-role">Rol</Label>

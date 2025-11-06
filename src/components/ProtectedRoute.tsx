@@ -1,7 +1,11 @@
+/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/components/ProtectedRoute.tsx */
+/* --- CÓDIGO COMPLETO Y CORREGIDO --- */
 import { ReactNode, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+// --- CORRECCIÓN: Importar desde el hook correcto ---
+import { useAuth } from '@/hooks/useAuth';
 import { Skeleton } from '@/components/ui/skeleton';
+import Layout from '@/components/Layout'; // <-- Añadir Layout para consistencia
 
 export const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { user, loading } = useAuth();
@@ -15,17 +19,17 @@ export const ProtectedRoute = ({ children }: { children: ReactNode }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-8">
-        <div className="container mx-auto space-y-4">
-          <Skeleton className="h-12 w-64" />
-          <Skeleton className="h-64 w-full" />
+      // --- CORRECCIÓN: Usar el Layout para la pantalla de carga ---
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Cargando...</p>
         </div>
-      </div>
+      </Layout>
     );
   }
 
   if (!user) {
-    return null;
+    return null; // O redirigir, aunque el useEffect ya lo hace
   }
 
   return <>{children}</>;
