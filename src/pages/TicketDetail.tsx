@@ -1,3 +1,5 @@
+/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/pages/TicketDetail.tsx */
+/* --- CÓDIGO COMPLETO Y CORREGIDO --- */
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,14 +18,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
-// =================================================================
-// ========= ¡INICIO DE LA MODIFICACIÓN DE INTERFACES! =============
-// =================================================================
-
-interface ProfileStub {
-  full_name: string;
-}
-
+// --- INTERFACES ACTUALIZADAS ---
+// Los datos de perfil se agregarán manualmente
 interface Ticket {
   id: string;
   title: string;
@@ -34,9 +30,9 @@ interface Ticket {
   created_by: string;
   assigned_to: string | null;
   resolution_summary: string | null;
-  // Perfiles que cargaremos con la consulta corregida
-  creator: ProfileStub | null;
-  assignee: ProfileStub | null;
+  // Campos que rellenaremos manualmente
+  creator_name: string;
+  assignee_name: string | null;
 }
 
 interface Comment {
@@ -45,12 +41,10 @@ interface Comment {
   created_at: string;
   user_id: string;
   is_internal: boolean;
-  // Perfil que cargaremos con la consulta corregida
-  profiles: ProfileStub | null;
+  // Campo que rellenaremos manualmente
+  user_full_name: string;
 }
-// =================================================================
-// ========= ¡FIN DE LA MODIFICACIÓN DE INTERFACES! ================
-// =================================================================
+// --- FIN DE INTERFACES ---
 
 const getInitials = (name: string | undefined) => {
   if (!name) return '?';
@@ -73,58 +67,72 @@ const TicketDetail = () => {
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (id && user) { // Asegúrate de que el usuario esté cargado
+    if (id && user) {
       fetchTicketDetails();
       fetchComments();
     }
-  }, [id, user]); // Se ejecuta si 'id' o 'user' cambian
+  }, [id, user]);
 
   // =================================================================
-  // ========= ¡INICIO DE LA MODIFICACIÓN DE QUERIES! ================
+  // ========= ¡INICIO DE LA CORRECCIÓN DE LÓGICA! ===================
   // =================================================================
+
   const fetchTicketDetails = async () => {
-    if (!id || !user) return; // Añadido doble check
+    if (!id || !user) return;
+    setLoading(true);
 
-    setLoading(true); // Poner loading al inicio
     try {
-      // Consulta corregida para traer los perfiles relacionados
-      // La relación es: tickets.created_by -> auth.users.id <- profiles.id
-      // Le decimos a Supabase que 'created_by' es la clave para 'profiles'
-      const { data: ticketData, error } = await supabase
+      // 1. Obtener el ticket (sin joins)
+      const { data: ticketData, error: ticketError } = await supabase
         .from('tickets')
-        .select(`
-          *,
-          creator:profiles!created_by( full_name ),
-          assignee:profiles!assigned_to( full_name )
-        `)
+        .select(`*`) // <-- SOLO el ticket
         .eq('id', id)
         .single();
 
-      if (error) throw error;
-
-      if (ticketData) {
-        const canView = 
-          ticketData.created_by === user.id || 
-          role === 'admin' || role === 'technician';
-
-        if (!canView) {
-          toast({
-            title: 'Acceso denegado',
-            description: 'No tienes permiso para ver este ticket',
-            variant: 'destructive'
-          });
-          navigate('/dashboard');
-          return;
-        }
-        setTicket(ticketData as any);
+      if (ticketError) throw ticketError;
+      if (!ticketData) {
+        throw new Error("Ticket no encontrado");
       }
+
+      // 2. Verificar permisos
+      const canView = 
+        ticketData.created_by === user.id || 
+        role === 'admin' || role === 'technician';
+      
+      if (!canView) {
+        toast({ title: 'Acceso denegado', description: 'No tienes permiso para ver este ticket', variant: 'destructive' });
+        navigate('/dashboard');
+        return;
+      }
+
+      // 3. Obtener los perfiles (creador y asignado) en una consulta separada
+      const userIds: string[] = [ticketData.created_by];
+      if (ticketData.assigned_to) {
+        userIds.push(ticketData.assigned_to);
+      }
+
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+      
+      if (profilesError) throw profilesError;
+
+      // 4. Crear un "mapa" para buscar los nombres fácilmente
+      const profilesMap = new Map(profilesData.map(p => [p.id, p.full_name]));
+
+      // 5. Unir los datos manualmente
+      const hydratedTicket = {
+        ...ticketData,
+        creator_name: profilesMap.get(ticketData.created_by) || 'Usuario Desconocido',
+        assignee_name: ticketData.assigned_to ? (profilesMap.get(ticketData.assigned_to) || 'Técnico Desconocido') : 'Sin asignar'
+      };
+
+      setTicket(hydratedTicket as Ticket); // <- Usamos la interfaz Ticket actualizada
+
     } catch (error: any) {
       console.error('Error fetching ticket:', error);
-      toast({
-        title: 'Error al cargar ticket',
-        description: error.message || 'No se pudo cargar el ticket',
-        variant: 'destructive'
-      });
+      toast({ title: 'Error al cargar ticket', description: error.message || 'No se pudo cargar el ticket', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -133,30 +141,47 @@ const TicketDetail = () => {
   const fetchComments = async () => {
     if (!id) return;
     try {
-      // Consulta corregida para traer el perfil de cada comentario
-      // La relación es: comments.user_id -> auth.users.id <- profiles.id
-      const { data: commentsData, error } = await supabase
+      // 1. Obtener todos los comentarios
+      const { data: commentsData, error: commentsError } = await supabase
         .from('comments')
-        .select(`
-          *,
-          profiles:profiles!user_id ( full_name )
-        `)
+        .select(`*`) // <-- Solo pedimos comentarios
         .eq('ticket_id', id)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
-      setComments((commentsData as any) || []);
+      if (commentsError) throw commentsError;
+      if (!commentsData || commentsData.length === 0) {
+        setComments([]);
+        return;
+      }
+
+      // 2. Obtener los IDs únicos de los usuarios que comentaron
+      const userIds = [...new Set(commentsData.map(c => c.user_id))];
+
+      // 3. Obtener los perfiles de esos usuarios
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+      
+      if (profilesError) throw profilesError;
+
+      // 4. Crear un mapa para unir rápido
+      const profilesMap = new Map(profilesData.map(p => [p.id, p.full_name]));
+
+      // 5. Unir los comentarios con los nombres de los perfiles
+      const hydratedComments = commentsData.map(comment => ({
+        ...comment,
+        user_full_name: profilesMap.get(comment.user_id) || 'Usuario Desconocido'
+      }));
+
+      setComments(hydratedComments);
     } catch (error: any) {
       console.error('Error fetching comments:', error);
-      toast({
-        title: 'Error al cargar comentarios',
-        description: error.message || 'No se pudieron cargar los comentarios',
-        variant: 'destructive'
-      });
+      toast({ title: 'Error al cargar comentarios', description: error.message || 'No se pudieron cargar los comentarios', variant: 'destructive' });
     }
   };
   // =================================================================
-  // ========= ¡FIN DE LA MODIFICACIÓN DE QUERIES! ===================
+  // ========= ¡FIN DE LA CORRECCIÓN DE LÓGICA! ======================
   // =================================================================
 
   const addComment = async (isInternal: boolean) => {
@@ -216,7 +241,6 @@ const TicketDetail = () => {
 
   const closeTicket = async () => {
     try {
-      // Este update está bien, solo cambia el status.
       const { error } = await supabase
         .from('tickets')
         .update({ status: 'closed' })
@@ -282,7 +306,6 @@ const TicketDetail = () => {
   if (loading || !ticket) {
     return (
       <Layout>
-        {/* Muestra "Cargando..." que coincide con tu captura */}
         <div>Cargando...</div>
       </Layout>
     );
@@ -363,11 +386,13 @@ const TicketDetail = () => {
                     .map((comment) => (
                       <div key={comment.id} className="flex items-start gap-3">
                         <Avatar className="h-9 w-9 border">
-                          <AvatarFallback>{getInitials(comment.profiles?.full_name)}</AvatarFallback>
+                          {/* CORREGIDO: Usar el campo 'user_full_name' que rellenamos */}
+                          <AvatarFallback>{getInitials(comment.user_full_name)}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-1">
-                            <span className="font-medium text-sm">{comment.profiles?.full_name || 'Usuario'}</span>
+                             {/* CORREGIDO: Usar el campo 'user_full_name' */}
+                            <span className="font-medium text-sm">{comment.user_full_name}</span>
                             <span className="text-xs text-muted-foreground">
                               {formatDistanceToNow(new Date(comment.created_at), { locale: es, addSuffix: true })}
                             </span>
@@ -415,11 +440,13 @@ const TicketDetail = () => {
                       .map((comment) => (
                         <div key={comment.id} className="flex items-start gap-3">
                           <Avatar className="h-9 w-9 border">
-                            <AvatarFallback className="bg-secondary text-secondary-foreground">{getInitials(comment.profiles?.full_name)}</AvatarFallback>
+                            {/* CORREGIDO: Usar el campo 'user_full_name' */}
+                            <AvatarFallback className="bg-secondary text-secondary-foreground">{getInitials(comment.user_full_name)}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="font-medium text-sm">{comment.profiles?.full_name || 'Usuario'}</span>
+                              {/* CORREGIDO: Usar el campo 'user_full_name' */}
+                              <span className="font-medium text-sm">{comment.user_full_name}</span>
                               <span className="text-xs text-muted-foreground">
                                 {formatDistanceToNow(new Date(comment.created_at), { locale: es, addSuffix: true })}
                               </span>
@@ -477,15 +504,15 @@ const TicketDetail = () => {
                   <div className="flex items-center gap-2 text-sm">
                     <User className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground mr-1">Creado por:</span>
-                    {/* CORREGIDO: Leer desde el objeto 'creator' */}
-                    <span className="font-medium">{ticket.creator?.full_name || 'Desconocido'}</span>
+                    {/* CORREGIDO: Usar el campo 'creator_name' que rellenamos */}
+                    <span className="font-medium">{ticket.creator_name}</span>
                   </div>
                   
                   <div className="flex items-center gap-2 text-sm">
                     <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground mr-1">Asignado a:</span>
-                    {/* CORREGIDO: Leer desde el objeto 'assignee' */}
-                    <span className="font-medium">{ticket.assignee?.full_name || 'Sin asignar'}</span>
+                    {/* CORREGIDO: Usar el campo 'assignee_name' que rellenamos */}
+                    <span className="font-medium">{ticket.assignee_name}</span>
                   </div>
 
                   <div className="flex items-center gap-2 text-sm">

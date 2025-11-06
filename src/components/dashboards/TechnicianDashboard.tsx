@@ -1,3 +1,5 @@
+/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/components/dashboards/TechnicianDashboard.tsx */
+/* --- CÓDIGO COMPLETO Y CORREGIDO --- */
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,10 +30,8 @@ interface Ticket {
   created_at: string;
   created_by: string;
   
-  // Perfil que cargaremos
-  creator_profile: {
-    full_name: string;
-  } | null;
+  // Campo que rellenaremos manualmente
+  creator_name: string;
 }
 // --- FIN DE CORRECCIÓN DE INTERFAZ ---
 
@@ -45,23 +45,48 @@ const TechnicianDashboard = () => {
     fetchUnassignedTickets();
   }, []);
 
+  // =================================================================
+  // ========= ¡INICIO DE LA CORRECCIÓN DE LÓGICA! ===================
+  // =================================================================
   const fetchUnassignedTickets = async () => {
     try {
-      // --- QUERY CORREGIDA ---
+      // 1. Obtener tickets sin asignar
       const { data: ticketsData, error: ticketsError } = await supabase
         .from('tickets')
-        .select(`
-          *,
-          creator_profile:profiles!id=created_by ( full_name )
-        `)
+        .select(`*`) // <-- Solo pedimos los tickets
         .eq('status', 'open')
-        .is('assigned_to', null) // Corregido: 'assigned_to_id' a 'assigned_to'
+        .is('assigned_to', null)
         .order('priority', { ascending: false })
         .order('created_at', { ascending: true });
 
       if (ticketsError) throw ticketsError;
+      if (!ticketsData || ticketsData.length === 0) {
+        setTickets([]);
+        setLoading(false);
+        return;
+      }
 
-      setTickets((ticketsData as any) || []); 
+      // 2. Obtener los IDs únicos de los creadores
+      const userIds = [...new Set(ticketsData.map(t => t.created_by))];
+
+      // 3. Obtener los perfiles de esos usuarios
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+
+      if (profilesError) throw profilesError;
+
+      // 4. Crear mapa de perfiles
+      const profilesMap = new Map(profilesData.map(p => [p.id, p.full_name]));
+
+      // 5. Unir los tickets con los nombres de los creadores
+      const hydratedTickets = ticketsData.map(ticket => ({
+        ...ticket,
+        creator_name: profilesMap.get(ticket.created_by) || 'Usuario Desconocido'
+      }));
+
+      setTickets(hydratedTickets as any); 
     } catch (error) {
       console.error('Error fetching tickets:', error);
       toast({
@@ -73,15 +98,18 @@ const TechnicianDashboard = () => {
       setLoading(false);
     }
   };
+  // =================================================================
+  // ========= ¡FIN DE LA CORRECCIÓN DE LÓGICA! ======================
+  // =================================================================
+
 
   const assignTicket = async (ticketId: string) => {
     try {
-      // --- UPDATE CORREGIDO ---
       const { error } = await supabase
         .from('tickets')
         .update({ 
-          assigned_to: user?.id, // Corregido: 'assigned_to_id' a 'assigned_to'
-          status: 'in_progress' // Corregido: 'assigned' a 'in_progress'
+          assigned_to: user?.id,
+          status: 'in_progress'
         })
         .eq('id', ticketId);
 
@@ -180,7 +208,8 @@ const TechnicianDashboard = () => {
                         {getPriorityLabel(ticket.priority)}
                       </Badge>
                     </TableCell>
-                    <TableCell>{ticket.creator_profile?.full_name || 'Usuario'}</TableCell>
+                    {/* CORREGIDO: Usar el campo 'creator_name' */}
+                    <TableCell>{ticket.creator_name}</TableCell>
                     <TableCell>
                       {format(new Date(ticket.created_at), "d MMM, yyyy", { locale: es })}
                     </TableCell>
