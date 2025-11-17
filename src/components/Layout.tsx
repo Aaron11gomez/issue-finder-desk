@@ -1,11 +1,12 @@
 /* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/components/Layout.tsx */
-/* --- CÓDIGO COMPLETO Y CORREGIDO --- */
 import { ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { LogOut, LayoutDashboard, Users, FileText, Settings } from 'lucide-react';
+// --- MODIFICACIÓN: Importar KanbanSquare ---
+import { LogOut, LayoutDashboard, Users, FileText, Settings, KanbanSquare } from 'lucide-react'; 
 import { Link, useLocation } from 'react-router-dom';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { SoundToggle } from '@/components/SoundToggle';
 
 import {
   SidebarProvider,
@@ -46,11 +47,15 @@ const Layout = ({ children }: LayoutProps) => {
   const navItems = [
     ...(role === 'admin' ? [
       { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      // --- MODIFICACIÓN: Añadida ruta Kanban ---
+      { path: '/kanban', icon: KanbanSquare, label: 'Tablero Kanban' },
       { path: '/users', icon: Users, label: 'Usuarios' },
     ] : []),
     ...(role === 'technician' ? [
       { path: '/dashboard', icon: FileText, label: 'Tickets sin Asignar' },
       { path: '/my-assigned', icon: Settings, label: 'Mis Tickets' },
+      // --- MODIFICACIÓN: Añadida ruta Kanban ---
+      { path: '/kanban', icon: KanbanSquare, label: 'Tablero de Tareas' },
     ] : []),
     ...(role === 'client' ? [
       { path: '/dashboard', icon: FileText, label: 'Mis Tickets' },
@@ -86,6 +91,10 @@ const Layout = ({ children }: LayoutProps) => {
       </SidebarContent>
 
       <SidebarFooter>
+        <div className="px-2 pb-2 flex justify-end">
+           <SoundToggle />
+        </div>
+
         <div className="flex items-center gap-3 p-2">
           <Avatar className="h-10 w-10 border">
             <AvatarFallback className="bg-muted text-muted-foreground">
@@ -126,17 +135,14 @@ const Layout = ({ children }: LayoutProps) => {
               <span className="text-lg font-bold">Nexus Desk</span>
             </Link>
             
-            {/* --- CORRECCIÓN: Botón anidado eliminado --- */}
             <Sheet>
               <SheetTrigger asChild>
-                {/* <SidebarTrigger> ya es un botón */}
                 <SidebarTrigger />
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0 pt-8 border-r">
                 {sidebarContent}
               </SheetContent>
             </Sheet>
-            {/* --- FIN DE CORRECCIÓN --- */}
 
           </header>
 
