@@ -3,21 +3,21 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { usePresence } from '@/contexts/PresenceContext'; // HU-17
+import { usePresence } from '@/contexts/PresenceContext'; 
 import Layout from '@/components/Layout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/hooks/use-toast';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ArrowLeft, Send, User, CalendarDays, Ticket as TicketIcon, ShieldCheck, Paperclip, FileText } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ArrowLeft, Send, User, ShieldCheck, Paperclip, X, FileIcon, ImageIcon } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input'; // HU-15
+import { Input } from '@/components/ui/input'; 
 
 interface Ticket {
   id: string;
@@ -40,14 +40,13 @@ interface Comment {
   user_id: string;
   is_internal: boolean;
   user_full_name: string;
-  // HU-15: Adjuntos (Si decides guardarlo en metadata o tabla aparte, aquí mostramos lógica simple)
 }
 
-// HU-15 Interface para adjuntos
 interface Attachment {
     id: string;
     file_name: string;
     file_path: string;
+    file_type: string | null; // Agregado para verificar tipo
     comment_id?: string;
 }
 
@@ -59,27 +58,38 @@ const getInitials = (name: string | undefined) => {
 const TicketDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { user, role } = useAuth();
-  const { onlineUsers } = usePresence(); // HU-17
+  const { onlineUsers } = usePresence(); 
   const navigate = useNavigate();
   
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [attachments, setAttachments] = useState<Attachment[]>([]); // HU-15
+  const [attachments, setAttachments] = useState<Attachment[]>([]); 
   const [loading, setLoading] = useState(true);
   
   const [newComment, setNewComment] = useState('');
   const [newInternalNote, setNewInternalNote] = useState('');
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
-  const [uploading, setUploading] = useState(false); // HU-15
-  const fileInputRef = useRef<HTMLInputElement>(null); // HU-15
+  const [uploading, setUploading] = useState(false); 
+  const fileInputRef = useRef<HTMLInputElement>(null); 
+
+  // Estado para previsualización de archivo
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (id && user) {
       fetchTicketDetails();
       fetchComments();
-      fetchAttachments(); // HU-15
+      fetchAttachments(); 
     }
   }, [id, user]);
+
+  // Limpiar URL de previsualización al desmontar o cambiar archivo
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   const fetchTicketDetails = async () => {
     if (!id || !user) return;
@@ -141,14 +151,30 @@ const TicketDetail = () => {
     }
   };
 
-  // HU-15 Fetch Adjuntos
   const fetchAttachments = async () => {
       if (!id) return;
       const { data } = await supabase.from('attachments').select('*').eq('ticket_id', id);
       if (data) setAttachments(data as Attachment[]);
   };
 
-  // HU-15 Subir Archivo
+  // Manejar selección de archivo para previsualización
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      // Crear URL temporal para previsualización
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+    }
+  };
+
+  const clearSelectedFile = () => {
+    setSelectedFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleFileUpload = async (file: File): Promise<string | null> => {
       try {
         const fileExt = file.name.split('.').pop();
@@ -156,7 +182,7 @@ const TicketDetail = () => {
         const filePath = `${id}/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
-            .from('ticket-attachments') // Asegúrate de crear este bucket en Supabase
+            .from('ticket-attachments') 
             .upload(filePath, file);
 
         if (uploadError) throw uploadError;
@@ -168,11 +194,40 @@ const TicketDetail = () => {
       }
   };
 
+  const triggerEmailNotification = async (messageContent: string) => {
+    if (!ticket || !user) return;
+
+    // Lógica: Si soy el creador, el destinatario es el técnico asignado. Si soy técnico/admin, es el creador.
+    const isMeCreator = ticket.created_by === user.id;
+    const targetUserId = isMeCreator ? ticket.assigned_to : ticket.created_by;
+
+    if (!targetUserId) return; // Si no hay técnico asignado aún, no enviamos correo al "aire" (o se podría enviar a admins)
+
+    // Verificar si el usuario objetivo está ONLINE
+    if (onlineUsers.has(targetUserId)) {
+      console.log("Usuario destinatario está en línea, no se envía correo.");
+      return;
+    }
+
+    console.log("Usuario destinatario desconectado. Enviando notificación...");
+
+    try {
+      await supabase.functions.invoke('send-email-notification', {
+        body: {
+          target_user_id: targetUserId, // Enviamos el ID, la Edge Function buscará el email
+          subject: `Nueva actualización en ticket: ${ticket.title}`,
+          message: `Has recibido un nuevo comentario: "${messageContent.substring(0, 100)}${messageContent.length > 100 ? '...' : ''}"`
+        }
+      });
+    } catch (err) {
+      console.error("Error enviando notificación:", err);
+    }
+  };
+
   const addComment = async (isInternal: boolean) => {
     const content = isInternal ? newInternalNote : newComment;
-    const file = fileInputRef.current?.files?.[0]; // HU-15
-
-    if (!content.trim() && !file) {
+    
+    if (!content.trim() && !selectedFile) {
       toast({ title: 'Error', description: 'Escribe un mensaje o adjunta un archivo', variant: 'destructive' });
       return;
     }
@@ -186,7 +241,7 @@ const TicketDetail = () => {
         .insert({
           ticket_id: id,
           user_id: user?.id,
-          content: content || '(Archivo adjunto)',
+          content: content || (selectedFile ? '(Archivo adjunto)' : ''),
           is_internal: isInternal
         })
         .select()
@@ -194,15 +249,15 @@ const TicketDetail = () => {
 
       if (error) throw error;
 
-      // 2. HU-15 Subir y registrar adjunto si existe
-      if (file && commentData) {
-          const filePath = await handleFileUpload(file);
+      // 2. Subir y registrar adjunto si existe
+      if (selectedFile && commentData) {
+          const filePath = await handleFileUpload(selectedFile);
           if (filePath) {
               await supabase.from('attachments').insert({
-                  file_name: file.name,
+                  file_name: selectedFile.name,
                   file_path: filePath,
-                  file_size: file.size,
-                  file_type: file.type,
+                  file_size: selectedFile.size,
+                  file_type: selectedFile.type,
                   ticket_id: id,
                   comment_id: commentData.id,
                   uploaded_by: user?.id
@@ -210,9 +265,14 @@ const TicketDetail = () => {
           }
       }
 
+      // 3. Notificar por correo si corresponde
+      if (!isInternal) {
+         await triggerEmailNotification(content || "Se ha adjuntado un archivo.");
+      }
+
       toast({ title: 'Comentario agregado' });
       if (isInternal) setNewInternalNote(''); else setNewComment('');
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      clearSelectedFile();
       
       fetchComments();
       fetchAttachments();
@@ -223,7 +283,6 @@ const TicketDetail = () => {
     }
   };
 
-  // ... Resto de funciones (closeTicket, getColors) igual ...
   const closeTicket = async () => {
     await supabase.from('tickets').update({ status: 'closed' }).eq('id', id);
     setCloseDialogOpen(false);
@@ -232,14 +291,12 @@ const TicketDetail = () => {
 
   if (loading || !ticket) return <Layout><div>Cargando...</div></Layout>;
 
-  // HU-17 Lógica de Presencia
   const isAssigneeOnline = ticket.assigned_to && onlineUsers.has(ticket.assigned_to);
   const isCreatorOnline = onlineUsers.has(ticket.created_by);
 
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Header y botón volver... */}
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={() => navigate(-1)}><ArrowLeft className="w-4 h-4 mr-2" /> Volver</Button>
           {ticket.status === 'in_progress' && (role === 'admin' || role === 'technician') && (
@@ -249,13 +306,11 @@ const TicketDetail = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 lg:gap-6 items-start">
           
-          {/* Columna Principal */}
           <div className="lg:col-span-2 flex flex-col gap-6">
             <Card>
               <CardHeader>
                 <CardTitle className="text-2xl flex justify-between items-center">
                     {ticket.title}
-                    {/* HU-17 Indicador visual simple si el creador está viendo */}
                     {isCreatorOnline && ticket.created_by !== user?.id && (
                         <Badge variant="secondary" className="animate-pulse bg-green-100 text-green-800">Cliente en línea</Badge>
                     )}
@@ -266,13 +321,15 @@ const TicketDetail = () => {
               </CardContent>
             </Card>
 
-            {/* Sección Comentarios */}
             <Card>
               <CardHeader><CardTitle>Comentarios</CardTitle></CardHeader>
               <CardContent className="space-y-6">
                 {comments.filter(c => !c.is_internal).map((comment) => {
-                    // HU-15 Buscar adjunto para este comentario
                     const attachment = attachments.find(a => a.comment_id === comment.id);
+                    // Detectar si es imagen
+                    const isImage = attachment?.file_type?.startsWith('image/') || 
+                                    attachment?.file_name.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+
                     return (
                       <div key={comment.id} className="flex items-start gap-3">
                         <Avatar className="h-9 w-9 border">
@@ -285,18 +342,38 @@ const TicketDetail = () => {
                           </div>
                           <p className="text-sm text-muted-foreground whitespace-pre-wrap">{comment.content}</p>
                           
-                          {/* HU-15 Mostrar adjunto */}
+                          {/* Mostrar adjunto (Imagen inline o Link) */}
                           {attachment && (
-                              <div className="mt-2 flex items-center gap-2 p-2 bg-muted/50 rounded-md w-fit">
-                                  <Paperclip className="w-4 h-4 text-muted-foreground" />
-                                  <a 
-                                    href={`${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/ticket-attachments/${attachment.file_path}`} 
-                                    target="_blank" 
-                                    rel="noreferrer"
-                                    className="text-sm text-blue-600 hover:underline"
-                                  >
-                                      {attachment.file_name}
-                                  </a>
+                              <div className="mt-2">
+                                {isImage ? (
+                                  <div className="relative group max-w-md rounded-lg overflow-hidden border bg-muted/20">
+                                    <img 
+                                      src={`${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/ticket-attachments/${attachment.file_path}`} 
+                                      alt={attachment.file_name}
+                                      className="w-full h-auto object-cover max-h-80"
+                                    />
+                                    <a 
+                                      href={`${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/ticket-attachments/${attachment.file_path}`} 
+                                      target="_blank" 
+                                      rel="noreferrer"
+                                      className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100"
+                                    >
+                                       <span className="bg-background/80 text-foreground text-xs px-2 py-1 rounded shadow">Abrir original</span>
+                                    </a>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-md w-fit border">
+                                      <FileIcon className="w-4 h-4 text-muted-foreground" />
+                                      <a 
+                                        href={`${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/ticket-attachments/${attachment.file_path}`} 
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        className="text-sm text-blue-600 hover:underline truncate max-w-[200px]"
+                                      >
+                                          {attachment.file_name}
+                                      </a>
+                                  </div>
+                                )}
                               </div>
                           )}
                         </div>
@@ -307,16 +384,51 @@ const TicketDetail = () => {
               {ticket.status !== 'closed' && (
                 <CardFooter className="flex-col items-start gap-2 pt-4 border-t">
                   <Label htmlFor="new-comment">Añadir comentario</Label>
+                  
+                  {/* Previsualización de archivo antes de enviar */}
+                  {selectedFile && (
+                    <div className="w-full mb-2 p-3 bg-muted/30 border rounded-lg flex flex-col gap-2 relative">
+                       <div className="flex justify-between items-center">
+                          <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                             <Paperclip className="w-3 h-3" /> Adjunto seleccionado: {selectedFile.name}
+                          </span>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive"
+                            onClick={clearSelectedFile}
+                          >
+                             <X className="w-4 h-4" />
+                          </Button>
+                       </div>
+                       {previewUrl && selectedFile.type.startsWith('image/') && (
+                         <div className="rounded-md overflow-hidden border w-fit max-w-[200px]">
+                            <img src={previewUrl} alt="Preview" className="w-full h-auto" />
+                         </div>
+                       )}
+                    </div>
+                  )}
+
                   <Textarea id="new-comment" value={newComment} onChange={(e) => setNewComment(e.target.value)} rows={3} />
                   
-                  {/* HU-15 Input de Archivo */}
-                  <div className="flex items-center gap-2 w-full">
-                      <Input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        className="w-full text-xs" 
-                        accept="image/*,application/pdf"
-                      />
+                  <div className="flex items-center gap-2 w-full mt-2">
+                      <div className="flex-1">
+                         <label 
+                           htmlFor="file-upload" 
+                           className="cursor-pointer inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 border rounded-md hover:bg-muted"
+                         >
+                            <ImageIcon className="w-4 h-4" />
+                            {selectedFile ? 'Cambiar archivo' : 'Adjuntar imagen/archivo'}
+                         </label>
+                         <input 
+                           id="file-upload"
+                           type="file" 
+                           ref={fileInputRef} 
+                           className="hidden"
+                           onChange={handleFileSelect}
+                           accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                         />
+                      </div>
                       <Button onClick={() => addComment(false)} size="sm" disabled={uploading}>
                         <Send className="w-4 h-4 mr-2" /> {uploading ? 'Subiendo...' : 'Enviar'}
                       </Button>
@@ -326,12 +438,10 @@ const TicketDetail = () => {
             </Card>
           </div>
 
-          {/* Sidebar Detalles */}
           <div className="lg:col-span-1 lg:sticky lg:top-8 space-y-6">
             <Card>
               <CardHeader><CardTitle>Detalles</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                {/* ... Badges de estado y prioridad igual ... */}
                 <Separator />
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-sm">
@@ -339,7 +449,6 @@ const TicketDetail = () => {
                     <span className="text-muted-foreground mr-1">Creado por:</span>
                     <div className="flex items-center gap-2">
                         <span className="font-medium">{ticket.creator_name}</span>
-                        {/* HU-17 Indicador */}
                         {isCreatorOnline && <div className="w-2 h-2 bg-green-500 rounded-full" title="En línea" />}
                     </div>
                   </div>
@@ -348,11 +457,9 @@ const TicketDetail = () => {
                     <span className="text-muted-foreground mr-1">Asignado a:</span>
                      <div className="flex items-center gap-2">
                         <span className="font-medium">{ticket.assignee_name}</span>
-                        {/* HU-17 Indicador */}
                         {isAssigneeOnline && <div className="w-2 h-2 bg-green-500 rounded-full" title="En línea" />}
                     </div>
                   </div>
-                  {/* Fecha y ID ... */}
                 </div>
               </CardContent>
             </Card>
@@ -360,7 +467,6 @@ const TicketDetail = () => {
 
         </div>
         
-        {/* Dialog cerrar ticket (renderizado condicionalmente) */}
         {closeDialogOpen && (
             <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
               <DialogContent>

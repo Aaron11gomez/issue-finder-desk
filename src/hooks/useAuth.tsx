@@ -1,5 +1,6 @@
+/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/hooks/useAuth.tsx */
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
-import { User, Session, RealtimeChannel } from '@supabase/supabase-js';
+import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { toast } from './use-toast';
@@ -10,6 +11,7 @@ interface Profile {
   id: string;
   full_name: string;
   is_active: boolean;
+  specialties?: string[]; // <--- AGREGADO: Array de especialidades
 }
 
 interface AuthContextType {
@@ -34,209 +36,92 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    
-    if (!error) {
-      toast({
-        title: "Inicio de sesión exitoso",
-        description: "Bienvenido de vuelta",
-      });
-    }
-    
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (!error) toast({ title: "Inicio de sesión exitoso", description: "Bienvenido de vuelta" });
     return { error };
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
     const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-        data: {
-          full_name: fullName
-        }
-      }
+      email, password, options: { emailRedirectTo: `${window.location.origin}/`, data: { full_name: fullName } }
     });
-    
-    if (!error) {
-      toast({
-        title: "Registro exitoso",
-        description: "Tu cuenta ha sido creada",
-      });
-    }
-    
+    if (!error) toast({ title: "Registro exitoso", description: "Tu cuenta ha sido creada" });
     return { error };
   };
 
-  // Función para cerrar sesión de forma segura usando useCallback
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
-    setProfile(null);
-    setRole(null);
+    setUser(null); setSession(null); setProfile(null); setRole(null);
     navigate('/auth');
-    toast({
-      title: "Sesión cerrada",
-      description: "Has cerrado sesión correctamente",
-    });
+    toast({ title: "Sesión cerrada", description: "Has cerrado sesión correctamente" });
   }, [navigate]);
 
   useEffect(() => {
-    // 1. Obtener la sesión inicial al cargar la aplicación.
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+      setSession(session); setUser(session?.user ?? null); setLoading(false);
     });
-
-    // 2. Escuchar cambios en el estado de autenticación (login/logout).
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email);
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session); setUser(session?.user ?? null); setLoading(false);
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
-  // 3. Efecto separado para obtener datos y escuchar cambios de rol cuando el usuario cambia.
   useEffect(() => {
-    if (!user) {
-      setProfile(null);
-      setRole(null);
-      return;
-    }
-
-    let isMounted = true; // Flag para evitar actualizaciones de estado si el componente se desmonta
+    if (!user) { setProfile(null); setRole(null); return; }
+    let isMounted = true;
 
     const fetchUserData = async () => {
       try {
-        // 1. OBTENER EL PERFIL
+        // 1. OBTENER EL PERFIL Y ESPECIALIDADES
         let profileData: Profile | null = null;
         const { data: profileRes, error: profileError } = await supabase
           .from('profiles')
-          .select('*')
+          .select('*') // Esto traerá specialties si existe en la tabla
           .eq('id', user.id)
           .single();
 
         if (profileError && profileError.code === 'PGRST116') {
-          console.warn("No profile found for user, creating one...");
-          const { data: newProfile, error: createError } = await supabase
+          // Crear perfil si no existe
+           const { data: newProfile } = await supabase
             .from('profiles')
-            .insert({
-              id: user.id,
-              full_name: user.user_metadata?.full_name || user.email || 'Usuario'
-            })
-            .select()
-            .single();
-          
-          if (createError) throw createError;
+            .insert({ id: user.id, full_name: user.user_metadata?.full_name || user.email })
+            .select().single();
           profileData = newProfile as Profile;
-        } else if (profileError) {
-          throw profileError;
         } else {
           profileData = profileRes;
         }
 
-        // 2. VERIFICAR SI ESTÁ ACTIVO
         if (profileData && !profileData.is_active) {
-          toast({
-            title: "Cuenta inactiva",
-            description: "Tu cuenta ha sido desactivada. Contacta al administrador.",
-            variant: "destructive"
-          });
-          await signOut();
-          return;
+          toast({ title: "Cuenta inactiva", description: "Contacta al administrador.", variant: "destructive" });
+          await signOut(); return;
         }
+        if (isMounted) setProfile(profileData);
 
-        if (!isMounted) return; // No actualizar estado si el componente se desmontó
-        setProfile(profileData);
-
-        // 3. OBTENER EL ROL
-        let roleData: { role: UserRole } | null = null;
-        const { data: roleRes, error: roleError } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .single();
-
-        if (roleError && roleError.code === 'PGRST116') {
-          console.warn("No role found for user, creating one (default: client)...");
-          const { data: newRole, error: createRoleError } = await supabase
-            .from('user_roles')
-            .insert({
-              user_id: user.id,
-              role: 'client'
-            })
-            .select('role')
-            .single();
-          
-          if (createRoleError) throw createRoleError;
-          roleData = newRole as { role: UserRole };
-        } else if (roleError) {
-          throw roleError;
-        } else {
-          roleData = roleRes;
+        // 2. OBTENER EL ROL
+        const { data: roleRes } = await supabase.from('user_roles').select('role').eq('user_id', user.id).single();
+        // Si no tiene rol, crear como client por defecto
+        let userRole = roleRes?.role;
+        if (!userRole) {
+            await supabase.from('user_roles').insert({ user_id: user.id, role: 'client' });
+            userRole = 'client';
         }
-        
-        if (!isMounted) return; // No actualizar estado si el componente se desmontó
-        setRole(roleData?.role || 'client');
+        if (isMounted) setRole(userRole as UserRole);
 
       } catch (error: any) {
-        console.error('Error en fetchUserData:', error);
-        if (isMounted) {
-          toast({
-            title: 'Error de autenticación',
-            description: `No se pudo cargar tu perfil: ${error.message}`,
-            variant: 'destructive',
-          });
-        }
+        console.error('Error fetchUserData:', error);
       }
     };
     
     fetchUserData();
-
-    // 4. Configurar el canal de Realtime para escuchar cambios en el rol.
-    const roleUpdateChannel = supabase
-      .channel(`user_role_changes_${user.id}`)
-      .on(
-        'postgres_changes',
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'user_roles', 
-          filter: `user_id=eq.${user.id}` 
-        },
-        (payload) => {
-          if (!isMounted) return;
-          const newRole = payload.new.role as UserRole;
-          console.log('Role changed via Realtime to:', newRole);
-          setRole(newRole);
-          toast({
-            title: "Rol actualizado",
-            description: `Tu rol ha sido cambiado a '${newRole}'. La página se recargará.`,
-          });
-          setTimeout(() => window.location.reload(), 2000);
-        }
-      )
+    
+    // Realtime para roles
+    const channel = supabase.channel(`role_updates_${user.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_roles', filter: `user_id=eq.${user.id}` }, 
+      (payload) => { if(isMounted) setRole(payload.new.role as UserRole); window.location.reload(); })
       .subscribe();
 
-    return () => {
-      isMounted = false; // Marcar como desmontado
-      if (roleUpdateChannel) {
-        supabase.removeChannel(roleUpdateChannel);
-      }
-    };
-  }, [user?.id]); // Remover signOut de las dependencias
+    return () => { isMounted = false; supabase.removeChannel(channel); };
+  }, [user?.id]);
 
   return (
     <AuthContext.Provider value={{ user, session, profile, role, loading, signIn, signUp, signOut }}>
@@ -247,8 +132,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };

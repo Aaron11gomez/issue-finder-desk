@@ -1,3 +1,4 @@
+/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/types/ticket.ts */
 export type Priority = 'critical' | 'high' | 'medium' | 'low';
 
 export interface Ticket {
@@ -9,15 +10,14 @@ export interface Ticket {
   created_at: string;
   updated_at: string;
   
-  // Relaciones y Datos Extendidos
-  created_by: string; // ID del usuario
-  created_by_name?: string; // Nombre (unido manualmente)
-  created_by_email?: string; // Email (unido manualmente)
-  assigned_to: string | null; // ID del técnico
+  created_by: string; 
+  created_by_name?: string; 
+  created_by_email?: string; 
+  assigned_to: string | null; 
   assigned_to_name?: string | null;
   
   category_id?: string;
-  category_name?: string; // Para mostrar en la UI
+  category_name?: string; 
 }
 
 export interface ServiceCategory {
@@ -25,4 +25,14 @@ export interface ServiceCategory {
   name: string;
   description: string;
   icon: string;
+}
+
+// Nuevo: Interfaz para manejar las especialidades en la UI
+export interface UserProfile {
+    id: string;
+    full_name: string;
+    email?: string;
+    role: string;
+    is_active: boolean;
+    specialties?: string[]; // Array de IDs de categorías
 }
