@@ -5,13 +5,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { SoundProvider } from "@/contexts/SoundContext";
-import { PresenceProvider } from "@/contexts/PresenceContext"; // <--- NUEVO IMPORT HU-17
+import { PresenceProvider } from "@/contexts/PresenceContext"; 
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import Users from "@/pages/Users";
 import TicketDetail from "@/pages/TicketDetail";
 import MyAssignedTickets from "@/pages/MyAssignedTickets";
 import KanbanBoard from "@/pages/KanbanBoard";
+import Profile from "@/pages/Profile"; // NUEVO IMPORT
 import NotFound from "@/pages/NotFound";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
@@ -24,36 +25,19 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <SoundProvider>
-            <PresenceProvider> {/* <--- ENVOLVER AQUÍ HU-17 */}
+            <PresenceProvider> 
               <Routes>
-                {/* Rutas públicas */}
                 <Route path="/auth" element={<Auth />} />
 
-                {/* Rutas protegidas */}
-                <Route 
-                  path="/" 
-                  element={<ProtectedRoute><Navigate to="/dashboard" replace /></ProtectedRoute>} 
-                />
-                <Route 
-                  path="/dashboard" 
-                  element={<ProtectedRoute><Dashboard /></ProtectedRoute>} 
-                />
-                <Route 
-                  path="/users" 
-                  element={<ProtectedRoute><Users /></ProtectedRoute>} 
-                />
-                <Route 
-                  path="/my-assigned" 
-                  element={<ProtectedRoute><MyAssignedTickets /></ProtectedRoute>} 
-                />
-                <Route 
-                  path="/kanban" 
-                  element={<ProtectedRoute><KanbanBoard /></ProtectedRoute>} 
-                />
-                <Route 
-                  path="/ticket/:id" 
-                  element={<ProtectedRoute><TicketDetail /></ProtectedRoute>} 
-                />
+                <Route path="/" element={<ProtectedRoute><Navigate to="/dashboard" replace /></ProtectedRoute>} />
+                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
+                <Route path="/my-assigned" element={<ProtectedRoute><MyAssignedTickets /></ProtectedRoute>} />
+                <Route path="/kanban" element={<ProtectedRoute><KanbanBoard /></ProtectedRoute>} />
+                <Route path="/ticket/:id" element={<ProtectedRoute><TicketDetail /></ProtectedRoute>} />
+                
+                {/* NUEVA RUTA */}
+                <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>

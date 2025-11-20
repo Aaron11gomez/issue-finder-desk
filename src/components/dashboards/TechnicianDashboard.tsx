@@ -11,7 +11,8 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Filter, ArrowUpDown, Clock } from 'lucide-react'; // Nuevos iconos
+import { Search, Filter, ArrowUpDown } from 'lucide-react';
+import { PriorityBadge } from '@/components/PriorityBadge'; // Importamos
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -33,12 +34,11 @@ const TechnicianDashboard = () => {
   const [filteredTickets, setFilteredTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
-  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest'); // Nuevo filtro de fecha
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   
-  const { user, profile } = useAuth(); // Necesitamos el profile para las especialidades
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -50,7 +50,6 @@ const TechnicianDashboard = () => {
   useEffect(() => {
     let result = [...tickets];
 
-    // 1. Filtro de Texto
     if (searchTerm) {
         const lower = searchTerm.toLowerCase();
         result = result.filter(t => 
@@ -60,12 +59,10 @@ const TechnicianDashboard = () => {
         );
     }
 
-    // 2. Filtro de Prioridad
     if (priorityFilter !== 'all') {
         result = result.filter(t => t.priority === priorityFilter);
     }
 
-    // 3. Ordenamiento por Fecha (Hora)
     result.sort((a, b) => {
         const dateA = new Date(a.created_at).getTime();
         const dateB = new Date(b.created_at).getTime();
@@ -77,7 +74,6 @@ const TechnicianDashboard = () => {
 
   const fetchUnassignedTickets = async () => {
     try {
-      // Obtener tickets abiertos sin asignar
       const { data: ticketsData, error: ticketsError } = await supabase
         .from('tickets')
         .select(`*, service_categories(name)`)
@@ -86,9 +82,6 @@ const TechnicianDashboard = () => {
 
       if (ticketsError) throw ticketsError;
 
-      // --- LÓGICA DE ENRUTAMIENTO INTELIGENTE (FILTRO POR ESPECIALIDAD) ---
-      // Si el técnico no tiene especialidades definidas (es generalista) o es admin, ve todo.
-      // Si tiene especialidades, solo ve tickets que coincidan con category_id.
       let visibleTickets = ticketsData || [];
       
       const technicianSpecialties = (profile as any)?.specialties || [];
@@ -98,9 +91,7 @@ const TechnicianDashboard = () => {
              t.category_id && technicianSpecialties.includes(t.category_id)
           );
       }
-      // ---------------------------------------------------------------------
 
-      // Hidratar nombres de creadores
       const userIds = [...new Set(visibleTickets.map(t => t.created_by))];
       const { data: profilesData } = await supabase
         .from('profiles')
@@ -138,8 +129,6 @@ const TechnicianDashboard = () => {
     }
   };
 
-  // Helpers (getPriorityColor, etc) ... se mantienen igual
-
   if (loading) return <div>Cargando tickets...</div>;
 
   return (
@@ -148,7 +137,6 @@ const TechnicianDashboard = () => {
         <div>
           <h1 className="text-3xl font-bold">Cola de Trabajo</h1>
           <p className="text-muted-foreground mt-2">
-             {/* Feedback visual de las especialidades activas */}
              {(profile as any)?.specialties?.length > 0 
                 ? "Mostrando tickets según tu especialidad." 
                 : "Mostrando todos los tickets (Vista General)."}
@@ -161,7 +149,6 @@ const TechnicianDashboard = () => {
                 <Input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8" />
             </div>
             
-            {/* Filtro Prioridad */}
             <Select value={priorityFilter} onValueChange={setPriorityFilter}>
                 <SelectTrigger className="w-[130px]"><Filter className="w-4 h-4 mr-2" /><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -173,7 +160,6 @@ const TechnicianDashboard = () => {
                 </SelectContent>
             </Select>
 
-            {/* Ordenar por Fecha */}
             <Select value={sortOrder} onValueChange={(v:any) => setSortOrder(v)}>
                 <SelectTrigger className="w-[160px]"><ArrowUpDown className="w-4 h-4 mr-2" /><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -197,7 +183,7 @@ const TechnicianDashboard = () => {
                   <TableHead>Título / Problema</TableHead>
                   <TableHead>Categoría</TableHead>
                   <TableHead>Prioridad</TableHead>
-                  <TableHead>Hora Creación</TableHead> {/* Nueva columna */}
+                  <TableHead>Hora Creación</TableHead>
                   <TableHead className="text-right">Acción</TableHead>
                 </TableRow>
               </TableHeader>
@@ -213,12 +199,10 @@ const TechnicianDashboard = () => {
                         <Badge variant="outline">{ticket.service_categories?.name || 'General'}</Badge>
                     </TableCell>
                     <TableCell>
-                      {/* Usar Badge componente aquí según prioridad */}
-                       <Badge variant="outline">{ticket.priority}</Badge>
+                       <PriorityBadge priority={ticket.priority} />
                     </TableCell>
                     <TableCell>
                         <div className="flex flex-col text-sm">
-                             {/* Mostrar hora y fecha relativa */}
                              <span className="font-medium">{format(new Date(ticket.created_at), "HH:mm", { locale: es })}</span>
                              <span className="text-xs text-muted-foreground capitalize">
                                 {format(new Date(ticket.created_at), "EEEE d", { locale: es })}

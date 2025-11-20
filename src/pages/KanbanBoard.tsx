@@ -1,4 +1,4 @@
-/* src/pages/KanbanBoard.tsx */
+/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/pages/KanbanBoard.tsx */
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
@@ -7,11 +7,20 @@ import { toast } from 'sonner';
 import { DragDropContext, Droppable, Draggable, OnDragEndResponder } from '@hello-pangea/dnd';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Priority } from '@/types/ticket'; // Importamos el tipo de prioridad
+import { Priority } from '@/types/ticket'; 
+import { useNavigate } from 'react-router-dom';
+import { Eye, Clock, AlertCircle, Calendar } from 'lucide-react';
+import { PriorityBadge } from '@/components/PriorityBadge';
+import { AssignTicketDialog } from '@/components/AssignTicketDialog';
+import { formatDistanceToNow, differenceInMinutes, format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
-// Definimos los tipos de datos locales para el tablero
+// Configuración del tiempo límite para alerta (en minutos)
+const TICKET_STALE_THRESHOLD_MINUTES = 30;
+
 type TicketStatus = 'open' | 'in_progress' | 'closed';
 
 interface TicketItem {
@@ -19,6 +28,7 @@ interface TicketItem {
   title: string;
   priority: Priority;
   status: TicketStatus;
+  created_at: string; // Agregado
 }
 
 interface Column {
@@ -31,67 +41,43 @@ interface ColumnsState {
   [key: string]: Column;
 }
 
-// Datos iniciales de las columnas
 const initialColumns: ColumnsState = {
-  open: {
-    id: 'open',
-    title: 'Abierto',
-    tickets: [],
-  },
-  in_progress: {
-    id: 'in_progress',
-    title: 'En Progreso',
-    tickets: [],
-  },
-  closed: {
-    id: 'closed',
-    title: 'Cerrado',
-    tickets: [],
-  },
-};
-
-const getPriorityColor = (priority: string): "destructive" | "default" | "secondary" => {
-  switch (priority) {
-    case 'critical': return 'destructive';
-    case 'high': return 'destructive';
-    case 'medium': return 'default';
-    case 'low': return 'secondary';
-    default: return 'default';
-  }
-};
-
-const getPriorityLabel = (priority: string) => {
-  switch (priority) {
-    case 'critical': return 'Crítica';
-    case 'high': return 'Alta';
-    case 'medium': return 'Media';
-    case 'low': return 'Baja';
-    default: return priority;
-  }
+  open: { id: 'open', title: 'Abierto', tickets: [] },
+  in_progress: { id: 'in_progress', title: 'En Progreso', tickets: [] },
+  closed: { id: 'closed', title: 'Cerrado', tickets: [] },
 };
 
 const KanbanBoard = () => {
   const [columns, setColumns] = useState<ColumnsState>(initialColumns);
   const [loading, setLoading] = useState(true);
   const { user, role } = useAuth();
+  const navigate = useNavigate();
+
+  // Estado para el diálogo de asignación
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [ticketToAssign, setTicketToAssign] = useState<{id: string, title: string} | null>(null);
 
   useEffect(() => {
     fetchTickets();
+    
+    // Polling para actualizar el tiempo relativo ("hace X min") cada minuto sin recargar todo
+    const interval = setInterval(() => {
+        setColumns(prev => ({...prev})); // Fuerza re-render para actualizar "hace X minutos"
+    }, 60000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const fetchTickets = async () => {
-    if (!user || role === 'client') return; // Clientes no deberían estar aquí
+    if (!user || role === 'client') return; 
 
     try {
       setLoading(true);
-      // Solo traemos tickets que no estén cerrados para un tablero ágil
-      // Opcional: puedes quitar el filtro de 'closed' si quieres verlos todos
       let query = supabase
         .from('tickets')
-        .select('id, title, priority, status')
-        .in('status', ['open', 'in_progress', 'closed']); // Traemos todos para todas las columnas
+        .select('id, title, priority, status, created_at') // Traemos created_at
+        .in('status', ['open', 'in_progress', 'closed']);
 
-      // Si es técnico, solo trae sus tickets asignados
       if (role === 'technician') {
         query = query.eq('assigned_to', user.id);
       }
@@ -100,7 +86,6 @@ const KanbanBoard = () => {
 
       if (error) throw error;
 
-      // Clasificar tickets en columnas
       const newColumns = { ...initialColumns };
       newColumns.open.tickets = [];
       newColumns.in_progress.tickets = [];
@@ -114,8 +99,7 @@ const KanbanBoard = () => {
 
       setColumns(newColumns);
     } catch (error: any) {
-      console.error('Error fetching tickets:', error);
-      toast.error('Error al cargar los tickets', { description: error.message });
+      toast.error('Error al cargar los tickets: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -123,14 +107,8 @@ const KanbanBoard = () => {
 
   const onDragEnd: OnDragEndResponder = async (result) => {
     const { source, destination, draggableId } = result;
-
-    // Si no hay destino (soltado fuera)
     if (!destination) return;
-
-    // Si se soltó en el mismo lugar
-    if (source.droppableId === destination.droppableId && source.index === destination.index) {
-      return;
-    }
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
     const startColumn = columns[source.droppableId as TicketStatus];
     const endColumn = columns[destination.droppableId as TicketStatus];
@@ -138,63 +116,49 @@ const KanbanBoard = () => {
 
     if (!ticket) return;
 
-    // Actualización Optimista (UI primero)
-    // 1. Quitar de la columna de origen
+    // Lógica Admin: Asignar al mover a Progreso
+    if (role === 'admin' && destination.droppableId === 'in_progress' && source.droppableId !== 'in_progress') {
+        setTicketToAssign({ id: ticket.id, title: ticket.title });
+        setAssignDialogOpen(true);
+        return; 
+    }
+
+    // Actualización local
     const newStartTickets = Array.from(startColumn.tickets);
     newStartTickets.splice(source.index, 1);
-    
-    // 2. Añadir a la columna de destino
     const newEndTickets = Array.from(endColumn.tickets);
     newEndTickets.splice(destination.index, 0, ticket);
 
     const newColumnsState = {
       ...columns,
-      [startColumn.id]: {
-        ...startColumn,
-        tickets: newStartTickets,
-      },
-      [endColumn.id]: {
-        ...endColumn,
-        tickets: newEndTickets,
-      },
+      [startColumn.id]: { ...startColumn, tickets: newStartTickets },
+      [endColumn.id]: { ...endColumn, tickets: newEndTickets },
     };
-    
-    // Si la suelta en la misma columna (solo reordenar)
+
     if (startColumn.id === endColumn.id) {
-         const reorderedTickets = Array.from(startColumn.tickets);
-         const [removed] = reorderedTickets.splice(source.index, 1);
-         reorderedTickets.splice(destination.index, 0, removed);
-         
-         setColumns({
-             ...columns,
-             [startColumn.id]: {
-                 ...startColumn,
-                 tickets: reorderedTickets
-             }
-         });
-         // (Opcional: podrías guardar el "orden" en la BD aquí)
+         const reordered = Array.from(startColumn.tickets);
+         const [moved] = reordered.splice(source.index, 1);
+         reordered.splice(destination.index, 0, moved);
+         setColumns({ ...columns, [startColumn.id]: { ...startColumn, tickets: reordered } });
          return;
     }
 
-    // Si cambia de columna, actualiza el estado local
     setColumns(newColumnsState);
 
-    // Actualización de Base de Datos
+    // Actualizar DB
     const newStatus = endColumn.id as TicketStatus;
-    const { error } = await supabase
-      .from('tickets')
-      .update({ status: newStatus })
-      .eq('id', ticket.id);
+    const updates: any = { status: newStatus };
+    
+    if (role === 'technician' && newStatus === 'in_progress') {
+       updates.assigned_to = user?.id;
+    }
+
+    const { error } = await supabase.from('tickets').update(updates).eq('id', ticket.id);
 
     if (error) {
-      toast.error('Error al mover ticket', {
-        description: 'No se pudo actualizar el estado. Reintentando...',
-      });
-      // Revertir el estado si falla
+      toast.error('Error al mover ticket');
       setColumns(columns); 
     } else {
-      toast.success(`Ticket #${ticket.id.substring(0, 4)} movido a "${endColumn.title}"`);
-      // Actualizar el estado del ticket en el objeto local
       ticket.status = newStatus;
     }
   };
@@ -203,39 +167,45 @@ const KanbanBoard = () => {
     <Layout>
       <div className="space-y-4">
         <div>
-          <h1 className="text-3xl font-bold">Tablero Personal</h1>
+          <h1 className="text-3xl font-bold">{role === 'admin' ? 'Tablero de Supervisión' : 'Tablero de Tareas'}</h1>
           <p className="text-muted-foreground mt-2">
-            Gestiona tus tickets arrastrando y soltando las tarjetas.
+             {role === 'admin' ? 'Gestiona y asigna tickets a tu equipo.' : 'Gestiona tus tickets asignados.'}
           </p>
         </div>
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Skeleton className="h-96" />
-            <Skeleton className="h-96" />
-            <Skeleton className="h-96" />
+            <Skeleton className="h-96" /><Skeleton className="h-96" /><Skeleton className="h-96" />
           </div>
         ) : (
           <DragDropContext onDragEnd={onDragEnd}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start h-full">
               {Object.values(columns).map((column) => (
-                <Column key={column.id} column={column} />
+                <Column key={column.id} column={column} navigate={navigate} />
               ))}
             </div>
           </DragDropContext>
+        )}
+
+        {ticketToAssign && (
+            <AssignTicketDialog 
+                open={assignDialogOpen}
+                onOpenChange={setAssignDialogOpen}
+                ticketId={ticketToAssign.id}
+                currentTitle={ticketToAssign.title}
+                onAssigned={fetchTickets} 
+            />
         )}
       </div>
     </Layout>
   );
 };
 
-// Componente interno para la Columna
-const Column = ({ column }: { column: Column }) => (
-  <Card className="bg-muted/30">
-    <CardHeader className="p-4">
-      <CardTitle className="flex items-center justify-between">
-        <span className="text-lg">{column.title}</span>
-        <Badge variant="secondary">{column.tickets.length}</Badge>
+const Column = ({ column, navigate }: { column: Column, navigate: any }) => (
+  <Card className="bg-muted/30 h-full min-h-[500px] flex flex-col">
+    <CardHeader className="p-4 pb-2">
+      <CardTitle className="flex items-center justify-between text-base">
+        {column.title} <Badge variant="secondary">{column.tickets.length}</Badge>
       </CardTitle>
     </CardHeader>
     <Droppable droppableId={column.id}>
@@ -243,20 +213,11 @@ const Column = ({ column }: { column: Column }) => (
         <CardContent
           ref={provided.innerRef}
           {...provided.droppableProps}
-          className={cn(
-            "p-4 min-h-96 space-y-4 transition-colors",
-            snapshot.isDraggingOver && "bg-accent"
-          )}
+          className={cn("p-3 flex-1 space-y-3 transition-colors", snapshot.isDraggingOver && "bg-accent/50 rounded-lg")}
         >
-          {column.tickets.length === 0 ? (
-             <div className="flex items-center justify-center h-full pt-16">
-                 <p className="text-sm text-muted-foreground">Vacío</p>
-             </div>
-          ) : (
-            column.tickets.map((ticket, index) => (
-              <TicketCard key={ticket.id} ticket={ticket} index={index} />
-            ))
-          )}
+          {column.tickets.map((ticket, index) => (
+            <TicketCard key={ticket.id} ticket={ticket} index={index} navigate={navigate} />
+          ))}
           {provided.placeholder}
         </CardContent>
       )}
@@ -264,31 +225,73 @@ const Column = ({ column }: { column: Column }) => (
   </Card>
 );
 
-// Componente interno para la Tarjeta de Ticket
-const TicketCard = ({ ticket, index }: { ticket: TicketItem; index: number }) => (
-  <Draggable draggableId={ticket.id} index={index}>
-    {(provided, snapshot) => (
-      <div
-        ref={provided.innerRef}
-        {...provided.draggableProps}
-        {...provided.dragHandleProps}
-        className={cn(
-          "bg-card rounded-lg border shadow-sm p-4 cursor-grab active:cursor-grabbing",
-          snapshot.isDragging && "shadow-lg scale-105"
-        )}
-      >
-        <h4 className="font-medium mb-2">{ticket.title}</h4>
-        <div className="flex justify-between items-center">
-          <Badge variant={getPriorityColor(ticket.priority)}>
-            {getPriorityLabel(ticket.priority)}
-          </Badge>
-          <span className="text-xs text-muted-foreground">
-            ID: {ticket.id.substring(0, 8)}...
-          </span>
+const TicketCard = ({ ticket, index, navigate }: { ticket: TicketItem; index: number, navigate: any }) => {
+  
+  // Lógica de "Ticket Desatendido" (Smart Alert)
+  // Si está en 'open' y han pasado más de X minutos
+  const minutesSinceCreation = differenceInMinutes(new Date(), new Date(ticket.created_at));
+  const isStale = ticket.status === 'open' && minutesSinceCreation >= TICKET_STALE_THRESHOLD_MINUTES;
+
+  return (
+    <Draggable draggableId={ticket.id} index={index}>
+      {(provided, snapshot) => (
+        <div
+          ref={provided.innerRef}
+          {...provided.draggableProps}
+          {...provided.dragHandleProps}
+          className={cn(
+            "bg-card rounded-lg border shadow-sm p-3 select-none hover:shadow-md transition-all group relative",
+            snapshot.isDragging && "shadow-xl rotate-2 scale-105 z-50",
+            // Estilo de alerta si está desatendido
+            isStale && "border-red-300 bg-red-50/50 dark:bg-red-900/10"
+          )}
+          style={{ ...provided.draggableProps.style }}
+        >
+          {/* Indicador de Alerta Visual */}
+          {isStale && (
+             <div className="absolute -top-2 -right-2 animate-bounce">
+                <Badge variant="destructive" className="shadow-sm px-1.5 h-5 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> Desatendido
+                </Badge>
+             </div>
+          )}
+
+          <div className="flex justify-between items-start gap-2 mb-2">
+             <div className="scale-90 origin-top-left">
+                <PriorityBadge priority={ticket.priority} />
+             </div>
+             <Button 
+               variant="ghost" size="icon" className="h-6 w-6 -mt-1 -mr-1 text-muted-foreground hover:text-primary"
+               onClick={(e) => { e.stopPropagation(); navigate(`/ticket/${ticket.id}`); }}
+               title="Ver detalles"
+             >
+                <Eye className="w-4 h-4" />
+             </Button>
+          </div>
+          
+          <h4 className={cn("font-medium text-sm mb-3 line-clamp-2 leading-tight", isStale && "text-red-800 dark:text-red-300")}>
+              {ticket.title}
+          </h4>
+          
+          <div className="flex flex-col gap-1 text-xs text-muted-foreground border-t pt-2 mt-2">
+             <div className="flex justify-between items-center">
+                <span className="font-mono text-[10px]">#{ticket.id.substring(0, 6)}</span>
+                {/* Fecha / Hora exacta */}
+                <div className="flex items-center gap-1" title={format(new Date(ticket.created_at), "PPP p", {locale: es})}>
+                   <Calendar className="w-3 h-3" />
+                   {format(new Date(ticket.created_at), "dd/MM HH:mm")}
+                </div>
+             </div>
+             {/* Tiempo relativo (hace X min) */}
+             <div className={cn("flex items-center gap-1 justify-end font-medium", isStale ? "text-red-600" : "text-blue-600")}>
+                <Clock className="w-3 h-3" />
+                {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true, locale: es })}
+             </div>
+          </div>
         </div>
-      </div>
-    )}
-  </Draggable>
-);
+      )}
+    </Draggable>
+  );
+};
 
 export default KanbanBoard;

@@ -1,4 +1,3 @@
-/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/pages/Users.tsx */
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
@@ -84,6 +83,7 @@ const Users = () => {
       setFilteredUsers(mergedUsers);
     } catch (error: any) {
       console.error(error);
+      toast({ title: 'Error', description: 'No se pudieron cargar los usuarios', variant: 'destructive' });
     } finally { setLoading(false); }
   };
 
@@ -115,7 +115,7 @@ const Users = () => {
       if (createForm.role === 'technician' && createForm.specialties.length > 0) {
          await supabase.from('profiles').update({ specialties: createForm.specialties }).eq('id', newUserId);
       }
-      toast({ title: 'Usuario creado' });
+      toast({ title: 'Usuario creado', description: 'El usuario ha sido creado exitosamente' });
       setCreateDialogOpen(false); 
       setCreateForm({ fullName: '', email: '', password: '', role: 'technician', specialties: [] });
       fetchUsers();
@@ -131,7 +131,7 @@ const Users = () => {
         specialties: editForm.role === 'technician' ? editForm.specialties : [] 
       }).eq('id', selectedUser.id);
       await supabase.from('user_roles').update({ role: editForm.role }).eq('user_id', selectedUser.id);
-      toast({ title: 'Usuario actualizado' });
+      toast({ title: 'Usuario actualizado', description: 'Los datos se han guardado correctamente.' });
       setEditDialogOpen(false); fetchUsers();
     } catch (e: any) { toast({ title: 'Error', description: e.message, variant: 'destructive' }); }
   };
@@ -215,6 +215,16 @@ const Users = () => {
     </div>
   );
 
+  // Helper para mapear nombre de icono (string) a componente Lucide
+  const getRankIconComponent = (iconName: string) => {
+      switch(iconName) {
+          case 'Award': return Award;
+          case 'Zap': return Zap;
+          case 'ShieldCheck': return ShieldCheck;
+          default: return Shield;
+      }
+  };
+
   if (loading) return <Layout><div>Cargando...</div></Layout>;
 
   return (
@@ -227,6 +237,7 @@ const Users = () => {
               <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
                 <DialogTrigger asChild><Button><Plus className="w-4 h-4 mr-2" /> Nuevo Personal</Button></DialogTrigger>
                 <DialogContent className="sm:max-w-[500px]"><DialogHeader><DialogTitle>Crear Personal</DialogTitle></DialogHeader>
+                  <DialogDescription>Crea una nueva cuenta de técnico o administrador.</DialogDescription>
                   <form onSubmit={createUser} className="space-y-4 mt-2">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2"><Label>Nombre</Label><Input value={createForm.fullName} onChange={e => setCreateForm({...createForm, fullName: e.target.value})} /></div>
@@ -251,7 +262,7 @@ const Users = () => {
             <div className="relative flex-1">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input 
-                    placeholder="Buscar..." 
+                    placeholder="Buscar por nombre o correo..." 
                     value={searchTerm} 
                     onChange={(e) => setSearchTerm(e.target.value)} 
                     className="pl-8" 
@@ -268,7 +279,7 @@ const Users = () => {
         </TableRow></TableHeader><TableBody>
             {filteredUsers.map(user => {
                 const rankInfo = user.role === 'technician' ? getTechnicianRankInfo(user.specialties?.length || 0, categories.length) : null;
-                const RankIcon = rankInfo ? (rankInfo.icon === 'Award' ? Award : rankInfo.icon === 'Zap' ? Zap : ShieldCheck) : Shield;
+                const RankIcon = rankInfo ? getRankIconComponent(rankInfo.icon) : Shield;
 
                 return (
                 <TableRow key={user.id}>
@@ -319,6 +330,7 @@ const Users = () => {
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader><DialogTitle>Editar {selectedUser?.full_name}</DialogTitle></DialogHeader>
+                <DialogDescription>Modifica el rol o especialidades.</DialogDescription>
                 <form onSubmit={updateUser} className="space-y-4">
                     <div className="space-y-2"><Label>Nombre</Label><Input value={editForm.fullName} onChange={e => setEditForm({...editForm, fullName: e.target.value})} /></div>
                     <div className="space-y-2"><Label>Rol</Label>
