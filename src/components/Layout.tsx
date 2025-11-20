@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { getTechnicianRankInfo } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { LogOut, LayoutDashboard, Users, FileText, Settings, KanbanSquare, Award, Zap, ShieldCheck, Shield, User } from 'lucide-react'; 
+import { LogOut, LayoutDashboard, Users, FileText, Settings, KanbanSquare, Award, Zap, ShieldCheck, Shield, User, FileBarChart } from 'lucide-react'; // Importar FileBarChart
 import { Link, useLocation } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { SoundToggle } from '@/components/SoundToggle';
@@ -34,7 +34,6 @@ const Layout = ({ children }: LayoutProps) => {
 
   useEffect(() => {
      if(profile?.id) {
-         // Usamos .png para mantener la consistencia
          const { data } = supabase.storage.from('avatars').getPublicUrl(`${profile.id}/avatar.png`); 
          setAvatarUrl(data.publicUrl);
      }
@@ -45,8 +44,17 @@ const Layout = ({ children }: LayoutProps) => {
   const RankIcon = rankInfo ? (rankInfo.icon === 'Award' ? Award : rankInfo.icon === 'Zap' ? Zap : ShieldCheck) : null;
 
   const navItems = [
-    ...(role === 'admin' ? [{ path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' }, { path: '/kanban', icon: KanbanSquare, label: 'Tablero Kanban' }, { path: '/users', icon: Users, label: 'Usuarios' }] : []),
-    ...(role === 'technician' ? [{ path: '/dashboard', icon: FileText, label: 'Tickets sin Asignar' }, { path: '/my-assigned', icon: Settings, label: 'Mis Tickets' }, { path: '/kanban', icon: KanbanSquare, label: 'Tablero de Tareas' }] : []),
+    ...(role === 'admin' ? [
+        { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/kanban', icon: KanbanSquare, label: 'Tablero Kanban' },
+        { path: '/users', icon: Users, label: 'Usuarios' },
+        { path: '/reports', icon: FileBarChart, label: 'Reportes' } // NUEVO ITEM
+    ] : []),
+    ...(role === 'technician' ? [
+        { path: '/dashboard', icon: FileText, label: 'Tickets sin Asignar' }, 
+        { path: '/my-assigned', icon: Settings, label: 'Mis Tickets' }, 
+        { path: '/kanban', icon: KanbanSquare, label: 'Tablero de Tareas' }
+    ] : []),
     ...(role === 'client' ? [{ path: '/dashboard', icon: FileText, label: 'Mis Tickets' }] : []),
   ];
 

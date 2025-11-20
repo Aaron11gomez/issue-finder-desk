@@ -12,7 +12,8 @@ import Users from "@/pages/Users";
 import TicketDetail from "@/pages/TicketDetail";
 import MyAssignedTickets from "@/pages/MyAssignedTickets";
 import KanbanBoard from "@/pages/KanbanBoard";
-import Profile from "@/pages/Profile"; // NUEVO IMPORT
+import Profile from "@/pages/Profile";
+import AdminReports from "@/pages/AdminReports"; // NUEVO IMPORT
 import NotFound from "@/pages/NotFound";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
@@ -35,9 +36,10 @@ const App = () => (
                 <Route path="/my-assigned" element={<ProtectedRoute><MyAssignedTickets /></ProtectedRoute>} />
                 <Route path="/kanban" element={<ProtectedRoute><KanbanBoard /></ProtectedRoute>} />
                 <Route path="/ticket/:id" element={<ProtectedRoute><TicketDetail /></ProtectedRoute>} />
-                
-                {/* NUEVA RUTA */}
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+                
+                {/* NUEVA RUTA DE REPORTES */}
+                <Route path="/reports" element={<ProtectedRoute><AdminReports /></ProtectedRoute>} />
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>
