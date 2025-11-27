@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 
 interface Ticket {
   id: string;
+  ticket_number: number; // AGREGADO
   title: string;
   description: string;
   priority: 'critical' | 'high' | 'medium' | 'low';
@@ -56,7 +57,8 @@ const MyAssignedTickets = () => {
         result = result.filter(t => 
             t.title.toLowerCase().includes(lower) || 
             (t.description && t.description.toLowerCase().includes(lower)) ||
-            t.id.toLowerCase().includes(lower)
+            // BÚSQUEDA POR NÚMERO
+            t.ticket_number?.toString().includes(lower)
         );
     }
 
@@ -112,6 +114,17 @@ const MyAssignedTickets = () => {
     }
   };
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'in_progress': 
+        return <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200">En Progreso</Badge>;
+      case 'closed': 
+        return <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-200">Cerrado</Badge>;
+      default: 
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
   if (loading) return <Layout><div>Cargando tickets...</div></Layout>;
 
   return (
@@ -153,8 +166,7 @@ const MyAssignedTickets = () => {
         {/* SECCIÓN 1: EN PROGRESO (Activos) */}
         <div className="space-y-4">
             <div className="flex items-center gap-2">
-                {/* ICONO DE COLOR AZUL */}
-                <PlayCircle className="h-5 w-5 text-blue-600" /> 
+                <PlayCircle className="h-5 w-5 text-blue-600" />
                 <h2 className="text-xl font-semibold">En Progreso ({activeTickets.length})</h2>
             </div>
             
@@ -194,14 +206,13 @@ const MyAssignedTickets = () => {
   );
 };
 
-// Subcomponente de Tarjeta para reutilizar
+// Subcomponente de Tarjeta
 const TicketCard = ({ ticket, navigate, isClosed = false }: { ticket: Ticket, navigate: any, isClosed?: boolean }) => {
     
     const getStatusBadge = (status: string) => {
         switch (status) {
           case 'in_progress': 
-            // NUEVO COLOR PARA "EN PROGRESO"
-            return <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200">En Progreso</Badge>; 
+            return <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200">En Progreso</Badge>;
           case 'closed': 
             return <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-200">Cerrado</Badge>;
           default: 
@@ -213,15 +224,16 @@ const TicketCard = ({ ticket, navigate, isClosed = false }: { ticket: Ticket, na
         <Card 
             className={cn(
                 "flex flex-col h-full hover:shadow-md transition-all duration-200 group cursor-pointer border-l-4",
-                isClosed ? "border-l-green-500 bg-muted/10" : "border-l-blue-500" // BORDE AZUL PARA "EN PROGRESO"
+                isClosed ? "border-l-green-500 bg-muted/10" : "border-l-blue-500"
             )} 
             onClick={() => navigate(`/ticket/${ticket.id}`)}
         >
             <CardHeader className="pb-3 pt-5">
                 <div className="flex justify-between items-start mb-2">
                     {getStatusBadge(ticket.status)}
-                    <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
-                        #{ticket.id.substring(0, 6)}
+                    {/* SOLO NÚMEROS */}
+                    <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded font-bold">
+                        #{ticket.ticket_number?.toString().padStart(5, '0')}
                     </span>
                 </div>
                 <CardTitle className="text-lg leading-tight group-hover:text-primary transition-colors line-clamp-2">
