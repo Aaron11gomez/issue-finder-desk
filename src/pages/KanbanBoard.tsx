@@ -1,136 +1,348 @@
-/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/pages/KanbanBoard.tsx */
-import { useEffect, useState } from 'react';
+/* src/pages/KanbanBoard.tsx */
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { DragDropContext, Droppable, Draggable, OnDragEndResponder } from '@hello-pangea/dnd';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Priority } from '@/types/ticket'; 
+import { Ticket } from '@/types/ticket'; 
 import { useNavigate } from 'react-router-dom';
-import { Eye, Clock, AlertCircle, Calendar } from 'lucide-react';
-import { PriorityBadge } from '@/components/PriorityBadge';
 import { AssignTicketDialog } from '@/components/AssignTicketDialog';
-import { formatDistanceToNow, differenceInMinutes, format } from 'date-fns';
+import { Search, Filter, Kanban, RefreshCcw, GripVertical, AlertCircle, Zap, Circle, CheckCircle2, Clock, User } from 'lucide-react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-
-const TICKET_STALE_THRESHOLD_MINUTES = 30;
 
 type TicketStatus = 'open' | 'in_progress' | 'closed';
 
-interface TicketItem {
-  id: string;
-  ticket_number: number; // AGREGADO
-  title: string;
-  priority: Priority;
-  status: TicketStatus;
-  created_at: string;
-}
-
-interface Column {
+interface ColumnData {
   id: TicketStatus;
   title: string;
-  tickets: TicketItem[];
+  color: string;
+  bg: string;
+  border: string;
+  icon: any;
 }
 
-interface ColumnsState { [key: string]: Column; }
-
-const initialColumns: ColumnsState = {
-  open: { id: 'open', title: 'Abierto', tickets: [] },
-  in_progress: { id: 'in_progress', title: 'En Progreso', tickets: [] },
-  closed: { id: 'closed', title: 'Cerrado', tickets: [] },
+// Configuración visual de las columnas (Más limpias)
+const COLUMN_CONFIG: Record<TicketStatus, ColumnData> = {
+  open: { 
+    id: 'open', 
+    title: 'Por Asignar', 
+    color: 'text-slate-600',
+    bg: 'bg-slate-100/50',
+    border: 'border-slate-200',
+    icon: Circle
+  },
+  in_progress: { 
+    id: 'in_progress', 
+    title: 'En Progreso', 
+    color: 'text-blue-600',
+    bg: 'bg-blue-50/50',
+    border: 'border-blue-200',
+    icon: Zap
+  },
+  closed: { 
+    id: 'closed', 
+    title: 'Completado', 
+    color: 'text-green-600',
+    bg: 'bg-green-50/50',
+    border: 'border-green-200',
+    icon: CheckCircle2
+  },
 };
 
 const KanbanBoard = () => {
-  const [columns, setColumns] = useState<ColumnsState>(initialColumns);
+  const [allTickets, setAllTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Filtros
+  const [searchTerm, setSearchTerm] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+
   const { user, role } = useAuth();
   const navigate = useNavigate();
+  
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [ticketToAssign, setTicketToAssign] = useState<{id: string, title: string} | null>(null);
 
-  useEffect(() => { fetchTickets(); const interval = setInterval(() => { setColumns(prev => ({...prev})); }, 60000); return () => clearInterval(interval); }, []);
+  useEffect(() => { 
+    if (user) {
+        fetchTickets(); 
+        const interval = setInterval(fetchTickets, 60000); 
+        return () => clearInterval(interval);
+    }
+  }, [user]);
 
   const fetchTickets = async () => {
     if (!user || role === 'client') return; 
     try {
-      setLoading(true);
-      // ASEGURAR ticket_number EN SELECT
-      let query = supabase.from('tickets').select('id, ticket_number, title, priority, status, created_at').in('status', ['open', 'in_progress', 'closed']);
-      if (role === 'technician') query = query.eq('assigned_to', user.id);
+      setIsRefreshing(true);
+      if (allTickets.length === 0) setLoading(true);
+
+      let query = supabase
+        .from('tickets')
+        .select('*')
+        .in('status', ['open', 'in_progress', 'closed'])
+        .order('created_at', { ascending: false });
+      
+      if (role === 'technician') {
+        query = query.eq('assigned_to', user.id);
+      }
+      
       const { data: ticketsData, error } = await query;
       if (error) throw error;
-      const newColumns = { ...initialColumns };
-      newColumns.open.tickets = []; newColumns.in_progress.tickets = []; newColumns.closed.tickets = [];
-      ticketsData.forEach((ticket) => { if (newColumns[ticket.status as TicketStatus]) { newColumns[ticket.status as TicketStatus].tickets.push(ticket as TicketItem); } });
-      setColumns(newColumns);
-    } catch (error: any) { toast.error('Error al cargar tickets'); } finally { setLoading(false); }
+
+      if (!ticketsData) return;
+
+      const userIds = [...new Set(ticketsData.map((t: any) => t.created_by).filter(Boolean))];
+      let namesMap = new Map<string, string>();
+      
+      if (userIds.length > 0) {
+          const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', userIds);
+          if (profiles) namesMap = new Map(profiles.map(p => [p.id, p.full_name]));
+      }
+
+      const formattedTickets: Ticket[] = ticketsData.map((t: any) => ({
+        ...t,
+        creator_name: namesMap.get(t.created_by) || 'Usuario',
+        status: ['open', 'in_progress', 'closed'].includes(t.status) ? t.status : 'open',
+        ticket_number: t.ticket_number || 0,
+        // Simulamos nombre de categoría si no viene en el join simple (puedes mejorar esto con un join real)
+        category_name: 'Soporte' 
+      }));
+
+      setAllTickets(formattedTickets);
+    } catch (error: any) { 
+        console.error("Error fetchTickets:", error);
+        toast.error('Error cargando tickets'); 
+    } finally { 
+        setLoading(false); 
+        setIsRefreshing(false);
+    }
   };
+
+  const columns = useMemo(() => {
+    const cols: Record<TicketStatus, Ticket[]> = { open: [], in_progress: [], closed: [] };
+    let filtered = allTickets;
+
+    if (searchTerm) {
+      const lower = searchTerm.toLowerCase();
+      filtered = filtered.filter(t => t.title.toLowerCase().includes(lower) || t.ticket_number?.toString().includes(lower));
+    }
+    if (priorityFilter !== 'all') {
+      filtered = filtered.filter(t => t.priority === priorityFilter);
+    }
+
+    filtered.forEach(ticket => {
+      const status = ticket.status as TicketStatus;
+      if (cols[status]) cols[status].push(ticket);
+    });
+    return cols;
+  }, [allTickets, searchTerm, priorityFilter]);
 
   const onDragEnd: OnDragEndResponder = async (result) => {
     const { source, destination, draggableId } = result;
-    if (!destination) return;
-    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
-    const startColumn = columns[source.droppableId as TicketStatus];
-    const endColumn = columns[destination.droppableId as TicketStatus];
-    const ticket = startColumn.tickets.find(t => t.id === draggableId);
-    if (!ticket) return;
-    if (role === 'admin' && destination.droppableId === 'in_progress' && source.droppableId !== 'in_progress') { setTicketToAssign({ id: ticket.id, title: ticket.title }); setAssignDialogOpen(true); return; }
-    const newStartTickets = Array.from(startColumn.tickets); newStartTickets.splice(source.index, 1);
-    const newEndTickets = Array.from(endColumn.tickets); newEndTickets.splice(destination.index, 0, ticket);
-    const newColumnsState = { ...columns, [startColumn.id]: { ...startColumn, tickets: newStartTickets }, [endColumn.id]: { ...endColumn, tickets: newEndTickets } };
-    if (startColumn.id === endColumn.id) { const reordered = Array.from(startColumn.tickets); const [moved] = reordered.splice(source.index, 1); reordered.splice(destination.index, 0, moved); setColumns({ ...columns, [startColumn.id]: { ...startColumn, tickets: reordered } }); return; }
-    setColumns(newColumnsState);
-    const newStatus = endColumn.id as TicketStatus;
-    const updates: any = { status: newStatus };
-    if (role === 'technician' && newStatus === 'in_progress') { updates.assigned_to = user?.id; }
-    const { error } = await supabase.from('tickets').update(updates).eq('id', ticket.id);
-    if (error) { toast.error('Error al mover ticket'); setColumns(columns); } else { ticket.status = newStatus; }
+    if (!destination || (source.droppableId === destination.droppableId && source.index === destination.index)) return;
+
+    const ticketId = draggableId;
+    const newStatus = destination.droppableId as TicketStatus;
+    const oldStatus = source.droppableId as TicketStatus;
+
+    if (role === 'admin' && newStatus === 'in_progress' && oldStatus !== 'in_progress') { 
+        const ticket = allTickets.find(t => t.id === ticketId);
+        if (ticket) { setTicketToAssign({ id: ticket.id, title: ticket.title }); setAssignDialogOpen(true); return; }
+    }
+
+    const updatedTickets = allTickets.map(t => t.id === ticketId ? { ...t, status: newStatus } : t);
+    setAllTickets(updatedTickets);
+
+    try {
+        const updates: any = { status: newStatus, updated_at: new Date().toISOString() };
+        if (role === 'technician' && newStatus === 'in_progress') { 
+             const currentTicket = allTickets.find(t => t.id === ticketId);
+             if (!currentTicket?.assigned_to) updates.assigned_to = user?.id;
+        }
+        const { error } = await supabase.from('tickets').update(updates).eq('id', ticketId);
+        if (error) throw error;
+        toast.success(`Ticket movido a ${COLUMN_CONFIG[newStatus].title}`);
+    } catch (error) {
+        toast.error('No se pudo actualizar');
+        fetchTickets();
+    }
   };
 
   return (
     <Layout>
-      <div className="space-y-4">
-        <div><h1 className="text-3xl font-bold">{role === 'admin' ? 'Tablero de Supervisión' : 'Tablero de Tareas'}</h1><p className="text-muted-foreground mt-2">{role === 'admin' ? 'Gestiona y asigna.' : 'Gestiona tus tickets asignados.'}</p></div>
-        {loading ? (<div className="grid grid-cols-1 md:grid-cols-3 gap-4"><Skeleton className="h-96" /><Skeleton className="h-96" /><Skeleton className="h-96" /></div>) 
-        : (<DragDropContext onDragEnd={onDragEnd}><div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start h-full">{Object.values(columns).map((column) => (<Column key={column.id} column={column} navigate={navigate} />))}</div></DragDropContext>)}
-        {ticketToAssign && (<AssignTicketDialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen} ticketId={ticketToAssign.id} currentTitle={ticketToAssign.title} onAssigned={fetchTickets} />)}
+      <div className="flex flex-col h-[calc(100vh-100px)] space-y-4 max-w-[1800px] mx-auto animate-in fade-in duration-500">
+        
+        {/* HEADER */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-1">
+            <div>
+                <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                    <Kanban className="w-6 h-6 text-primary" />
+                    Tablero Kanban
+                </h1>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto bg-background p-1 rounded-lg border shadow-sm">
+                <div className="relative flex-1 sm:w-64">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 border-none shadow-none focus-visible:ring-0 h-9"/>
+                </div>
+                <div className="h-6 w-px bg-border mx-1"></div>
+                <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                    <SelectTrigger className="w-[120px] border-none shadow-none focus:ring-0 h-9 gap-2 text-xs font-medium bg-muted/50 hover:bg-muted">
+                        <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent><SelectItem value="all">Prioridad</SelectItem><SelectItem value="critical">Crítica</SelectItem><SelectItem value="high">Alta</SelectItem><SelectItem value="medium">Media</SelectItem><SelectItem value="low">Baja</SelectItem></SelectContent>
+                </Select>
+                <Button variant="ghost" size="icon" onClick={fetchTickets} className={cn("h-9 w-9 hover:bg-muted text-muted-foreground", isRefreshing && "animate-spin text-primary")}><RefreshCcw className="w-4 h-4" /></Button>
+            </div>
+        </div>
+
+        {/* TABLERO */}
+        <div className="flex-1 overflow-x-auto overflow-y-hidden pb-2">
+            <DragDropContext onDragEnd={onDragEnd}>
+                <div className="flex h-full gap-4 min-w-[1000px]">
+                    {Object.entries(COLUMN_CONFIG).map(([columnId, config]) => (
+                        <KanbanColumn 
+                            key={columnId}
+                            config={config}
+                            tickets={columns[columnId as TicketStatus]}
+                            loading={loading}
+                            navigate={navigate}
+                        />
+                    ))}
+                </div>
+            </DragDropContext>
+        </div>
+
+        {ticketToAssign && <AssignTicketDialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen} ticketId={ticketToAssign.id} currentTitle={ticketToAssign.title} onAssigned={fetchTickets} />}
       </div>
     </Layout>
   );
 };
 
-const Column = ({ column, navigate }: { column: Column, navigate: any }) => (
-  <Card className="bg-muted/30 h-full min-h-[500px] flex flex-col"><CardHeader className="p-4 pb-2"><CardTitle className="flex items-center justify-between text-base">{column.title} <Badge variant="secondary">{column.tickets.length}</Badge></CardTitle></CardHeader><Droppable droppableId={column.id}>{(provided, snapshot) => (<CardContent ref={provided.innerRef} {...provided.droppableProps} className={cn("p-3 flex-1 space-y-3 transition-colors", snapshot.isDraggingOver && "bg-accent/50 rounded-lg")}>{column.tickets.map((ticket, index) => (<TicketCard key={ticket.id} ticket={ticket} index={index} navigate={navigate} />))}{provided.placeholder}</CardContent>)}</Droppable></Card>
-);
+// --- NUEVA TARJETA KANBAN (DISEÑO CLEAN / NOTION-LIKE) ---
+const KanbanCard = ({ ticket, onClick }: { ticket: Ticket, onClick: () => void }) => {
+    // Icono y color según prioridad
+    const priorityInfo = {
+        critical: { icon: AlertCircle, color: "text-red-500", bg: "bg-red-50" },
+        high: { icon: Zap, color: "text-orange-500", bg: "bg-orange-50" },
+        medium: { icon: Circle, color: "text-yellow-500", bg: "bg-yellow-50" },
+        low: { icon: Circle, color: "text-blue-500", bg: "bg-blue-50" }
+    }[ticket.priority] || { icon: Circle, color: "text-gray-500", bg: "bg-gray-50" };
 
-const TicketCard = ({ ticket, index, navigate }: { ticket: TicketItem; index: number, navigate: any }) => {
-  const minutesSinceCreation = differenceInMinutes(new Date(), new Date(ticket.created_at));
-  const isStale = ticket.status === 'open' && minutesSinceCreation >= TICKET_STALE_THRESHOLD_MINUTES;
+    const PriorityIcon = priorityInfo.icon;
 
-  return (
-    <Draggable draggableId={ticket.id} index={index}>
-      {(provided, snapshot) => (
-        <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} className={cn("bg-card rounded-lg border shadow-sm p-3 select-none hover:shadow-md transition-all group relative", snapshot.isDragging && "shadow-xl rotate-2 scale-105 z-50", isStale && "border-red-300 bg-red-50/50 dark:bg-red-900/10")} style={{ ...provided.draggableProps.style }}>
-          {isStale && (<div className="absolute -top-2 -right-2 animate-bounce"><Badge variant="destructive" className="shadow-sm px-1.5 h-5 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Desatendido</Badge></div>)}
-          <div className="flex justify-between items-start gap-2 mb-2"><div className="scale-90 origin-top-left"><PriorityBadge priority={ticket.priority} /></div><Button variant="ghost" size="icon" className="h-6 w-6 -mt-1 -mr-1 text-muted-foreground hover:text-primary" onClick={(e) => { e.stopPropagation(); navigate(`/ticket/${ticket.id}`); }} title="Ver detalles"><Eye className="w-4 h-4" /></Button></div>
-          <h4 className={cn("font-medium text-sm mb-3 line-clamp-2 leading-tight", isStale && "text-red-800 dark:text-red-300")}>{ticket.title}</h4>
-          <div className="flex flex-col gap-1 text-xs text-muted-foreground border-t pt-2 mt-2">
-             <div className="flex justify-between items-center">
-                {/* SOLO NÚMEROS */}
-                <span className="font-mono text-[10px] font-bold">#{ticket.ticket_number?.toString().padStart(5, '0')}</span>
-                <div className="flex items-center gap-1" title={format(new Date(ticket.created_at), "PPP p", {locale: es})}><Calendar className="w-3 h-3" />{format(new Date(ticket.created_at), "dd/MM HH:mm")}</div>
-             </div>
-             <div className={cn("flex items-center gap-1 justify-end font-medium", isStale ? "text-red-600" : "text-blue-600")}><Clock className="w-3 h-3" />{formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true, locale: es })}</div>
-          </div>
+    return (
+        <div 
+            onClick={onClick}
+            className="bg-white dark:bg-card p-3 rounded-lg border border-border/50 shadow-[0_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md hover:border-primary/30 transition-all cursor-pointer group flex flex-col gap-2"
+        >
+            {/* Cabecera: Prioridad y ID */}
+            <div className="flex items-center justify-between">
+                <div className={cn("flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide", priorityInfo.bg, priorityInfo.color)}>
+                    <PriorityIcon className="w-3 h-3" />
+                    {ticket.priority}
+                </div>
+                <span className="text-[10px] font-mono text-muted-foreground">#{ticket.ticket_number?.toString().padStart(5,'0')}</span>
+            </div>
+
+            {/* Título */}
+            <h4 className="text-sm font-semibold leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2">
+                {ticket.title}
+            </h4>
+
+            {/* Footer: Avatar y Tiempo */}
+            <div className="flex items-center justify-between pt-2 border-t border-dashed border-border/60 mt-1">
+                <div className="flex items-center gap-1.5" title={ticket.creator_name}>
+                    <Avatar className="h-5 w-5 border border-border">
+                        <AvatarFallback className="text-[8px] bg-secondary text-secondary-foreground">
+                            {ticket.creator_name?.substring(0,2).toUpperCase()}
+                        </AvatarFallback>
+                    </Avatar>
+                    <span className="text-[10px] text-muted-foreground truncate max-w-[80px]">{ticket.creator_name?.split(' ')[0]}</span>
+                </div>
+                
+                <div className="flex items-center gap-1 text-[10px] text-muted-foreground/80">
+                    <Clock className="w-3 h-3" />
+                    {formatDistanceToNow(new Date(ticket.created_at), { locale: es, addSuffix: true }).replace('alrededor de ', '')}
+                </div>
+            </div>
         </div>
-      )}
-    </Draggable>
-  );
+    );
+};
+
+// --- COLUMNA ---
+const KanbanColumn = ({ config, tickets, loading, navigate }: { config: ColumnData, tickets: Ticket[], loading: boolean, navigate: any }) => {
+    const HeaderIcon = config.icon;
+    
+    return (
+        <div className="flex flex-col flex-1 h-full min-w-[300px] rounded-xl bg-muted/40 border border-border/60 overflow-hidden">
+            {/* Cabecera Limpia */}
+            <div className="p-3 flex items-center justify-between bg-background/50 backdrop-blur-sm border-b">
+                <div className="flex items-center gap-2">
+                    <div className={cn("p-1.5 rounded-md bg-background border shadow-sm", config.color)}>
+                        <HeaderIcon className="w-4 h-4" />
+                    </div>
+                    <h3 className="font-semibold text-sm text-foreground/80">{config.title}</h3>
+                </div>
+                <span className="text-xs font-medium text-muted-foreground bg-background px-2 py-0.5 rounded-full border">
+                    {tickets.length}
+                </span>
+            </div>
+
+            <Droppable droppableId={config.id}>
+                {(provided, snapshot) => (
+                    <div
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className={cn(
+                            "flex-1 p-2 overflow-y-auto space-y-2 transition-colors scrollbar-none",
+                            snapshot.isDraggingOver ? "bg-primary/5" : ""
+                        )}
+                    >
+                        {loading ? (
+                            [1,2].map(i => <Skeleton key={i} className="h-24 w-full rounded-lg" />)
+                        ) : tickets.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center text-muted-foreground/30 opacity-60 min-h-[150px]">
+                                <GripVertical className="w-8 h-8 mb-2" />
+                                <p className="text-xs">Sin tickets</p>
+                            </div>
+                        ) : (
+                            tickets.map((ticket, index) => (
+                                <Draggable key={ticket.id} draggableId={ticket.id} index={index}>
+                                    {(provided, snapshot) => (
+                                        <div
+                                            ref={provided.innerRef}
+                                            {...provided.draggableProps}
+                                            {...provided.dragHandleProps}
+                                            style={{ ...provided.draggableProps.style }}
+                                            className={cn("transform transition-all", snapshot.isDragging && "rotate-2 scale-105 z-50")}
+                                        >
+                                            <KanbanCard ticket={ticket} onClick={() => navigate(`/ticket/${ticket.id}`)} />
+                                        </div>
+                                    )}
+                                </Draggable>
+                            ))
+                        )}
+                        {provided.placeholder}
+                        <div className="h-8" />
+                    </div>
+                )}
+            </Droppable>
+        </div>
+    );
 };
 
 export default KanbanBoard;

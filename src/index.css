@@ -1,26 +1,24 @@
-/* aaron11gomez/issue-finder-desk/issue-finder-desk-master/src/index.css */
+/* src/index.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 224 71.4% 4.1%;
+    /* --- FONDO PRINCIPAL: Gris azulado muy suave para evitar fatiga visual --- */
+    --background: 210 40% 98%; 
+    --foreground: 222.2 84% 4.9%;
 
+    /* --- TARJETAS: Blanco puro para destacar sobre el fondo --- */
     --card: 0 0% 100%;
-    --card-foreground: 224 71.4% 4.1%;
+    --card-foreground: 222.2 84% 4.9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 224 71.4% 4.1%;
+    --popover-foreground: 222.2 84% 4.9%;
 
-    /* Color primario (Azul vibrante) */
+    /* --- PRIMARIO: Azul Nexus (Vibrante pero profesional) --- */
     --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 0 0% 98%;
+    --primary-foreground: 210 40% 98%;
 
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -28,71 +26,66 @@ All colors MUST be HSL.
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    /* El 'accent' ahora usa el color primario pero más claro */
-    --accent: 221.2 83.2% 95.1%;
-    --accent-foreground: 221.2 83.2% 43.3%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
 
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 210 40% 98%;
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%; /* El 'ring' ahora usa el primario */
+    --ring: 221.2 83.2% 53.3%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem; /* Bordes un poco más redondeados para modernidad */
 
-    /* Colores del Sidebar (un tono ligeramente distinto para destacar) */
-    --sidebar-background: 0 0% 98%; /* Un gris muy claro */
-    --sidebar-foreground: 224 71.4% 4.1%;
-
-    --sidebar-primary: 221.2 83.2% 53.3%;
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 210 40% 94.1%; /* Un 'accent' más sutil para el sidebar */
-    --sidebar-accent-foreground: 221.2 83.2% 43.3%;
-
-    --sidebar-border: 214.3 31.8% 91.4%;
-    --sidebar-ring: 221.2 83.2% 53.3%;
+    /* --- SIDEBAR: TEMA OSCURO (NEXUS NAVY) --- */
+    /* Fondo azul oscuro profundo */
+    --sidebar-background: 222 47% 11%; 
+    /* Texto blanco suave */
+    --sidebar-foreground: 210 40% 98%; 
+    
+    /* Elemento activo: Azul primario brillante */
+    --sidebar-primary: 217 91% 60%; 
+    --sidebar-primary-foreground: 0 0% 100%;
+    
+    /* Hover: Un tono ligeramente más claro que el fondo */
+    --sidebar-accent: 217 33% 17%; 
+    --sidebar-accent-foreground: 210 40% 98%;
+    
+    --sidebar-border: 217 33% 20%; /* Borde sutil */
+    --sidebar-ring: 212.7 26.8% 83.9%;
   }
 
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
- 
-    --card: 222.2 84% 4.9%;
+    --card: 217 33% 17%; /* Tarjetas oscuras */
     --card-foreground: 210 40% 98%;
- 
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
- 
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
- 
+    --primary: 217 91% 60%;
+    --primary-foreground: 222.2 47.4% 11.2%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
- 
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
- 
-    --accent: 217.2 32.6% 27.5%; /* Accent más notorio en dark mode */
+    --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
- 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
- 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 221.2 83.2% 53.3%;
+    --ring: 212.7 26.8% 83.9%;
     
-    /* Sidebar en Dark Mode */
-    --sidebar-background: 222.2 84% 6.9%; /* Ligeramente más claro que el fondo */
+    /* Sidebar Dark sigue igual */
+    --sidebar-background: 222 47% 11%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 221.2 83.2% 53.3%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 217.2 32.6% 22.5%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 33% 17%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217.2 32.6% 17.5%;
-    --sidebar-ring: 221.2 83.2% 53.3%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
 
@@ -100,8 +93,23 @@ All colors MUST be HSL.
   * {
     @apply border-border;
   }
-
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Animación de entrada suave */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in-up 0.4s ease-out forwards;
 }
