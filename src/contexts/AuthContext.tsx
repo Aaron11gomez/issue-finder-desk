@@ -22,72 +22,73 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [role, setRole] = useState<string | null>(null);
-  // "loading" solo debe ser true durante la carga INICIAL de la página
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let mounted = true;
+  // Función segura para cargar datos sin detener la app
+  const fetchUserData = async (userId: string) => {
+    try {
+      // Intentamos obtener rol y perfil
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .maybeSingle(); // Usamos maybeSingle para no lanzar error si no existe
 
-    const initAuth = async () => {
-      try {
-        // 1. Carga inicial fuerte
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        
-        if (mounted) {
-          if (currentSession) {
-            setSession(currentSession);
-            setUser(currentSession.user);
-            await fetchUserData(currentSession.user.id);
-          }
-        }
-      } catch (error) {
-        console.error("Error inicializando auth:", error);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-    initAuth();
-
-    // 2. Escuchar cambios (login en otra pestaña, refresh token, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      if (!mounted) return;
+      if (roleData) setRole(roleData.role);
+      else setRole('client'); // Rol por defecto si falla o no existe
       
-      // Actualizamos estado local
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
+      if (profileData) setProfile(profileData);
 
-      if (newSession?.user) {
-        // IMPORTANTE: NO ponemos setLoading(true) aquí para evitar el bloqueo
-        // Hacemos la carga de datos en "segundo plano"
-        await fetchUserData(newSession.user.id);
+    } catch (error) {
+      console.error("Error cargando datos extra:", error);
+      // En caso de error, aseguramos un rol básico para que la UI funcione
+      setRole('client');
+    }
+  };
+
+  useEffect(() => {
+    // 1. Verificar sesión actual al cargar
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      // Si hay usuario, buscamos sus datos en segundo plano
+      if (session?.user) {
+        fetchUserData(session.user.id);
+      }
+
+      // IMPORTANTE: Quitamos loading INMEDIATAMENTE, igual que en Master.
+      // No esperamos a fetchUserData.
+      setLoading(false);
+    });
+
+    // 2. Escuchar cambios de sesión
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        // Carga en background
+        fetchUserData(session.user.id);
       } else {
-        // Si es logout, limpiamos
         setProfile(null);
         setRole(null);
       }
+
+      // Aseguramos siempre quitar el loading
+      setLoading(false);
     });
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
-  const fetchUserData = async (userId: string) => {
-    try {
-      // Obtenemos datos en paralelo para mayor velocidad
-      const [profileReq, roleReq] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', userId).single(),
-        supabase.from('user_roles').select('role').eq('user_id', userId).single()
-      ]);
-
-      setProfile(profileReq.data);
-      setRole(roleReq.data?.role || 'client');
-    } catch (error) {
-      console.error("Error fetching user data background:", error);
-    }
-  };
+  // --- Funciones de Auth ---
 
   const signIn = async (email: string, pass: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
@@ -109,7 +110,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setSession(null);
     setProfile(null);
     setRole(null);
-    toast.info('Sesión cerrada');
+    // Forzamos redirección o limpieza si es necesario
+    window.location.href = '/auth'; 
   };
 
   return (
